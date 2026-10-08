@@ -119,6 +119,16 @@ export function missingMaterials(b: BuildableDef, have: Record<string, number>):
   return out;
 }
 
+export function matName(id: string): string {
+  return matById(id)?.name ?? id;
+}
+
+export function matCostText(b: BuildableDef): string {
+  return Object.entries(b.materials)
+    .map(([id, n]) => `${n}× ${matName(id)}`)
+    .join(" + ");
+}
+
 /** Chat-Grammatik: „baue floß", „bau mir eine brücke", „floß bauen" … */
 export function parseBuildCommand(raw: string): { kind: "build"; def: BuildableDef } | { kind: "help" } | { kind: "unknown" } {
   const t = raw.toLowerCase().trim();

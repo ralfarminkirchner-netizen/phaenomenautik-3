@@ -27,6 +27,7 @@ export interface HudState {
   battlePhen: string | null;
   journalOpen: boolean;
   loreStone: string | null; // Id des offenen Lore-Steins
+  chatOpen: boolean;
   damageFlash: number; // 0..1 roter Vignetten-Blitz
   fireBuffUntil: number; // Timestamp (performance.now), 0 = kein Buff
 }
@@ -58,6 +59,7 @@ export const initialHud: HudState = {
   battlePhen: null,
   journalOpen: false,
   loreStone: null,
+  chatOpen: false,
   damageFlash: 0,
   fireBuffUntil: 0,
 };

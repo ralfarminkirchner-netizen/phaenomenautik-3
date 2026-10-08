@@ -16,13 +16,16 @@ import { clamp, lerp, mulberry32, fbm2 } from "../game/noise";
 import { HARBOR, ISLANDS, islandAt, terrainHeight, terrainSlope } from "../game/worldLayout";
 import { persistSave, grantXp, checkFinalUnlock, type SaveGame, type PlayerState } from "../game/state";
 import { Npcs } from "./npcs";
+import { Loot } from "./loot";
+import { Structures, buildFloss, buildLeiter, buildBruecke, clampSpan } from "./structures";
+import { BUILDABLES, missingMaterials, matName, matCostText, type BuildableDef } from "../game/materials";
 import { LoreStones } from "./lorestones";
 import { Creature } from "./creature";
 import { shrinePoint } from "../game/worldLayout";
 import { PHENOMENA } from "../game/data";
 import { audio } from "../game/audio";
 import { store } from "../game/store";
-import { preloadAll, extractMerged } from "./assets";
+import { preloadAll, extractMerged, getModel, setShadows } from "./assets";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
@@ -73,6 +76,16 @@ export class GameWorld {
   private loreStones!: LoreStones;
   private creatures = new Map<string, Creature>();
   private echoOrb: THREE.Mesh | null = null;
+  private loot!: Loot;
+  private structures!: Structures;
+  private buildSession: {
+    def: BuildableDef;
+    ghost: THREE.Object3D;
+    x: number; z: number; yaw: number;
+    ex?: number; ez?: number; topY?: number;
+    valid: boolean;
+  } | null = null;
+  private treasure: { id: string; x: number; z: number; obj: THREE.Object3D }[] = [];
 
   onReady: (() => void) | null = null;
 
@@ -138,6 +151,27 @@ export class GameWorld {
     // Lore-Runensteine
     this.loreStones = new LoreStones(this.scene, save.echoesFound);
 
+    // Sammelbare Materialien + gebaute Strukturen
+    this.loot = new Loot(this.scene, save.lootTaken);
+    this.structures = new Structures(this.scene, save.structures);
+
+    // Schatztruhe auf der Scholle (Floß-Rätsel)
+    {
+      const chest = getModel("chest").scene.clone(true);
+      setShadows(chest, true, false);
+      const cx = 2210;
+      const cz = 3560;
+      const cy = terrainHeight(cx, cz);
+      chest.position.set(cx, cy, cz);
+      chest.rotation.y = 0.7;
+      this.scene.add(chest);
+      if (!save.chestsOpened?.includes("scholle_truhe")) {
+        this.treasure.push({ id: "scholle_truhe", x: cx, z: cz, obj: chest });
+      } else {
+        chest.scale.setScalar(1);
+      }
+    }
+
     // Phänomen-Wächter auf den Inseln
     for (const isl of ISLANDS) {
       const phen = PHENOMENA.find((pp) => pp.id === isl.id);
@@ -184,7 +218,7 @@ export class GameWorld {
     // Ausgangsposition aus Spielstand
     this.ship.setPose(save.ship.x, save.ship.z, save.ship.heading);
     if (save.mode === "onfoot" && save.playerPos) {
-      const y = this.props.groundHeight(save.playerPos.x, save.playerPos.z);
+      const y = this.groundAt(save.playerPos.x, save.playerPos.z);
       this.player.place(save.playerPos.x, y, save.playerPos.z, Math.PI);
       this.player.group.visible = true;
       this.ship.moored = true;
@@ -198,15 +232,22 @@ export class GameWorld {
 
     // Start-Kamera
     if (this.save.mode === "sailing") this.snapSailCamera();
-    else this.player.snapCamera(this.camera, (x, z) => this.props.groundHeight(x, z));
+    else this.player.snapCamera(this.camera, (x, z) => this.groundAt(x, z));
 
     this.loop();
     if (this.onReady) this.onReady();
   }
 
+  /** Begehbare Höhe: Terrain/Steg + gebaute Strukturen */
+  groundAt(x: number, z: number): number {
+    const base = this.props.groundHeight(x, z);
+    const st = this.structures.heightAt(x, z);
+    return st !== null && st > base ? st : base;
+  }
+
   get uiLock(): boolean {
     const st = store.get();
-    return !!(st.menuOpen || st.dead || st.dialogNpc || st.battlePhen || st.journalOpen || st.loreStone);
+    return !!(st.menuOpen || st.dead || st.dialogNpc || st.battlePhen || st.journalOpen || st.loreStone || st.chatOpen);
   }
 
   // ── Eingaben ─────────────────────────────────────────────────────
@@ -224,13 +265,21 @@ export class GameWorld {
       store.set({ showFps: !store.get().showFps });
       e.preventDefault();
     }
+    if ((k === "t" || k === "b") && !this.uiLock && this.save.mode === "onfoot") {
+      store.set({ chatOpen: true });
+      if (document.pointerLockElement) document.exitPointerLock();
+    }
     if (k === "j" && !this.uiLock) {
       store.set({ journalOpen: true });
       if (document.pointerLockElement) document.exitPointerLock();
     }
     if (k === "escape") {
       const st = store.get();
-      if (st.journalOpen || st.dialogNpc || st.loreStone) {
+      if (this.buildSession) {
+        this.cancelBuild();
+      } else if (st.chatOpen) {
+        store.set({ chatOpen: false });
+      } else if (st.journalOpen || st.dialogNpc || st.loreStone) {
         store.set({ journalOpen: false, dialogNpc: null, loreStone: null });
       } else if (!st.battlePhen) {
         store.set({ menuOpen: !st.menuOpen });
@@ -307,6 +356,47 @@ export class GameWorld {
     }
     // Zu Fuß
     const p = this.player.pos;
+
+    // Bau-Modus: Geist platzieren
+    if (this.buildSession) {
+      const b = this.buildSession;
+      this.currentPrompt = {
+        key: "E",
+        text: b.valid ? `${b.def.name} hier bauen (${matCostText(b.def)})` : `${b.def.name}: hier nicht möglich — ${b.def.hint}`,
+        action: () => this.confirmBuild(),
+      };
+      return;
+    }
+
+    // Truhe
+    for (const tr of this.treasure) {
+      if (Math.hypot(p.x - tr.x, p.z - tr.z) < 2.6) {
+        this.currentPrompt = {
+          key: "E",
+          text: "Verschlossene Truhe öffnen",
+          action: () => this.openTreasure(tr.id),
+        };
+        return;
+      }
+    }
+
+    // Material aufheben
+    const it = this.loot.nearest(p.x, p.z, 2.6);
+    if (it) {
+      const name = it.mesh ? matName(it.matId) : it.matId;
+      this.currentPrompt = {
+        key: "E",
+        text: `${name} aufheben`,
+        action: () => this.takeLoot(it),
+      };
+      return;
+    }
+
+    // Floß-Hinweis beim Draufstehen
+    const raft = this.structures.raftUnder(p.x, p.z);
+    if (raft) {
+      this.currentPrompt = null; // Paddelhinweis kommt über HUD-Textzeile
+    }
 
     // Phänomen-Begegnung am Schrein
     const islHere = islandAt(p.x, p.z);
@@ -406,11 +496,23 @@ export class GameWorld {
         };
         return;
       }
-      this.currentPrompt = {
-        key: "E",
-        text: this.save.wood >= 1 ? "Rasten: Kraft ins Feuer (1 Holz → Stärkung)" : "Rasten (Stabilität auffrischen)",
-        action: () => this.restAtFire(),
-      };
+      if ((this.save.materials["eimer"] ?? 0) > 0) {
+        this.currentPrompt = {
+          key: "E",
+          text: "Rasten + Eimer-Wasser erwärmen (→ Warmes Wasser)",
+          action: () => {
+            this.restAtFire();
+            this.save.player.items.wasser = (this.save.player.items.wasser ?? 0) + 1;
+            store.toast("Das Wasser im Eimer dampft. Einweisgefüllt: +1 Warmes Wasser.", "good");
+          },
+        };
+      } else {
+        this.currentPrompt = {
+          key: "E",
+          text: this.save.wood >= 1 ? "Rasten: Kraft ins Feuer (1 Holz → Stärkung)" : "Rasten (Stabilität auffrischen)",
+          action: () => this.restAtFire(),
+        };
+      }
       return;
     }
     // Werkbank
@@ -537,7 +639,7 @@ export class GameWorld {
         }
       }
     }
-    const y = this.props.groundHeight(bx, bz);
+    const y = this.groundAt(bx, bz);
     this.player.place(bx, y, bz, this.ship.heading + Math.PI);
     this.player.group.visible = true;
     this.ship.moored = true;
@@ -546,7 +648,7 @@ export class GameWorld {
     audio.dock();
     store.set({ mode: "onfoot" });
     store.toast("Du stehst an Land. [E] interagiert, [Klick] schwingt die Axt, [Q] weicht aus.", "info");
-    this.player.snapCamera(this.camera, (x, z) => this.props.groundHeight(x, z));
+    this.player.snapCamera(this.camera, (x, z) => this.groundAt(x, z));
     this.persist();
   }
 
@@ -606,7 +708,7 @@ export class GameWorld {
         f = cand;
       }
     }
-    const y = this.props.groundHeight(f.x + 2, f.z + 2);
+    const y = this.groundAt(f.x + 2, f.z + 2);
     this.player.place(f.x + 2, y, f.z + 2, 0);
     this.save.mode = "onfoot";
     this.save.playerPos = { x: f.x + 2, z: f.z + 2 };
@@ -760,6 +862,152 @@ export class GameWorld {
     }
   }
 
+  // ── M2: Bauen, Loot, Truhen ─────────────────────────────────────
+  beginBuild(defId: string) {
+    const def = BUILDABLES.find((b) => b.id === defId);
+    if (!def) return;
+    const missing = missingMaterials(def, this.save.materials);
+    if (missing.length > 0) {
+      store.toast(`Für „${def.name}“ fehlt: ${missing.map((m) => `${m.need}× ${matName(m.id)}`).join(", ")}`, "bad");
+      return;
+    }
+    this.cancelBuild();
+    let ghost: THREE.Object3D;
+    if (def.id === "floss") ghost = buildFloss();
+    else if (def.id === "leiter") ghost = buildLeiter({ id: "ghost", type: "leiter", x: 0, z: 0, yaw: 0 });
+    else ghost = buildBruecke({ id: "ghost", type: "bruecke", x: 0, z: 0, yaw: 0, ex: 0, ez: 8 });
+    ghost.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        o.material = new THREE.MeshStandardMaterial({ color: 0x6aff8a, transparent: true, opacity: 0.55, depthWrite: false });
+        o.castShadow = false;
+      }
+    });
+    this.scene.add(ghost);
+    this.buildSession = { def, ghost, x: 0, z: 0, yaw: 0, valid: false };
+    store.toast(def.hint, "info");
+  }
+
+  cancelBuild() {
+    if (this.buildSession) {
+      this.scene.remove(this.buildSession.ghost);
+      this.buildSession = null;
+    }
+  }
+
+  get isBuilding(): boolean {
+    return this.buildSession !== null;
+  }
+
+  private updateBuildGhost() {
+    const b = this.buildSession;
+    if (!b) return;
+    const p = this.player.pos;
+    const fx = Math.sin(this.player.facing);
+    const fz = Math.cos(this.player.facing);
+    b.yaw = this.player.facing;
+
+    if (b.def.id === "floss") {
+      b.x = p.x + fx * 5;
+      b.z = p.z + fz * 5;
+      const h = terrainHeight(b.x, b.z);
+      b.valid = h < 1.2; // nasser Sand oder Wasser
+      b.ghost.position.set(b.x, h < 0.4 ? this.water.heightAt(b.x, b.z, this.elapsed) : h + 0.3, b.z);
+      b.ghost.rotation.y = b.yaw;
+    } else if (b.def.id === "leiter") {
+      b.x = p.x + fx * 1.6;
+      b.z = p.z + fz * 1.6;
+      const g0 = terrainHeight(b.x, b.z);
+      const tx = b.x + fx * 5.2;
+      const tz = b.z + fz * 5.2;
+      const gTop = terrainHeight(tx, tz);
+      b.ex = tx;
+      b.ez = tz;
+      b.topY = Math.max(gTop, g0 + 3.2);
+      b.valid = gTop - g0 > 1.6;
+      b.ghost.position.set(b.x, g0, b.z);
+      b.ghost.rotation.y = b.yaw + Math.PI;
+    } else {
+      // Brücke: Start vor dem Spieler, Ende bis zu 14 m in Blickrichtung
+      b.x = p.x + fx * 1.5;
+      b.z = p.z + fz * 1.5;
+      const span = clampSpan(b.x, b.z, b.x + fx * 14, b.z + fz * 14, 14);
+      b.ex = span.ex;
+      b.ez = span.ez;
+      const g0 = terrainHeight(b.x, b.z);
+      const g1 = terrainHeight(span.ex, span.ez);
+      let hasGap = false;
+      for (let f = 0.15; f < 1; f += 0.15) {
+        if (terrainHeight(b.x + (span.ex - b.x) * f, b.z + (span.ez - b.z) * f) < Math.min(g0, g1) - 0.8) hasGap = true;
+      }
+      b.valid = g0 > 0.2 && g1 > -0.6 && hasGap && Math.hypot(span.ex - b.x, span.ez - b.z) > 3;
+      b.topY = Math.max(g0, g1);
+      b.ghost.position.set(b.x, b.topY, b.z);
+      b.ghost.rotation.y = Math.atan2(span.ex - b.x, span.ez - b.z);
+    }
+    // Färben: grün = gültig, rot = ungültig
+    b.ghost.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        (o.material as THREE.MeshStandardMaterial).color.setHex(b.valid ? 0x6aff8a : 0xff5a5a);
+      }
+    });
+  }
+
+  confirmBuild() {
+    const b = this.buildSession;
+    if (!b) return;
+    if (!b.valid) {
+      store.toast(b.def.hint, "bad");
+      audio.cancel();
+      return;
+    }
+    for (const [id, n] of Object.entries(b.def.materials)) {
+      this.save.materials[id] = (this.save.materials[id] ?? 0) - n;
+    }
+    const def = {
+      id: `b_${b.def.id}_${Date.now() % 100000}`,
+      type: b.def.id as "floss" | "leiter" | "bruecke",
+      x: b.x,
+      z: b.z,
+      yaw: b.ghost.rotation.y,
+      ex: b.ex,
+      ez: b.ez,
+      topY: b.topY,
+    };
+    this.structures.add(def);
+    this.save.structures = this.structures.toSave();
+    audio.confirm();
+    store.toast(`${b.def.name} gebaut. MacGyver wäre stolz.`, "good");
+    this.cancelBuild();
+    this.persist();
+  }
+
+  private takeLoot(it: Parameters<Loot["take"]>[0]) {
+    const name = this.loot.take(it, this.elapsed);
+    if (name) {
+      this.save.materials[it.matId] = (this.save.materials[it.matId] ?? 0) + 1;
+      if (!this.save.lootTaken.includes(it.key)) this.save.lootTaken.push(it.key);
+      audio.confirm();
+      store.toast(`+1 ${name}`, "good");
+      this.persist();
+    }
+  }
+
+  private openTreasure(id: string) {
+    if (this.save.chestsOpened.includes(id)) return;
+    this.save.chestsOpened.push(id);
+    const tr = this.treasure.find((t) => t.id === id);
+    if (tr) {
+      this.treasure = this.treasure.filter((t) => t.id !== id);
+      tr.obj.rotation.x = -0.2;
+    }
+    this.save.crystals += 5;
+    this.save.materials.segeltuch = (this.save.materials.segeltuch ?? 0) + 1;
+    this.save.materials.eimer = (this.save.materials.eimer ?? 0) + 1;
+    audio.victory();
+    store.toast("Truhe geöffnet: 5 Kristalle, 1 Segeltuch, 1 Eimer. Der Weg hat sich gelohnt.", "good");
+    this.persist();
+  }
+
   /** Spielstand-Zugriff für Dialog-Overlay */
   getSave(): SaveGame {
     return this.save;
@@ -823,7 +1071,7 @@ export class GameWorld {
       this.updateSailCamera(dt);
     } else {
       const locked = this.uiLock;
-      const input = locked
+      let input = locked
         ? { x: 0, z: 0, sprint: false, jump: false }
         : {
             x: (this.keys.has("d") || this.keys.has("arrowright") ? 1 : 0) - (this.keys.has("a") || this.keys.has("arrowleft") ? 1 : 0),
@@ -831,7 +1079,38 @@ export class GameWorld {
             sprint: this.keys.has("shift"),
             jump: this.keys.has(" "),
           };
-      this.player.update(dt, input, (x, z) => this.props.groundHeight(x, z), this.props.colliders, this.particles);
+
+      // Floß-Modus: Wer auf einem Floß steht und W drückt, paddelt statt zu laufen
+      const raft = this.structures.raftUnder(this.player.pos.x, this.player.pos.z);
+      const paddling = !!(raft && input.z > 0 && !locked);
+      if (paddling) input = { x: 0, z: 0, sprint: false, jump: false };
+
+      this.player.update(dt, input, (x, z) => this.groundAt(x, z), this.props.colliders, this.particles);
+
+      // Bau-Geist folgt dem Spieler
+      if (this.buildSession) this.updateBuildGhost();
+
+      if (paddling && raft) {
+        const dirX = Math.sin(this.player.camYaw + Math.PI);
+        const dirZ = Math.cos(this.player.camYaw + Math.PI);
+        const moved = this.structures.updateRafts(dt, t, (x, z) => this.water.heightAt(x, z, t), {
+          active: true,
+          dirX,
+          dirZ,
+          rec: raft,
+        });
+        // Spieler bleibt auf dem Deck
+        this.player.pos.x = raft.def.x + Math.sin(this.player.camYaw) * -0.3;
+        this.player.pos.z = raft.def.z + Math.cos(this.player.camYaw) * -0.3;
+        this.player.pos.y = raft.deckY + 0.42;
+        if (moved.movedX !== 0 || moved.movedZ !== 0) {
+          this.player.facing = Math.atan2(dirX, dirZ);
+          if (Math.random() < dt * 0.5) this.save.structures = this.structures.toSave();
+        }
+      } else {
+        this.structures.updateRafts(dt, t, (x, z) => this.water.heightAt(x, z, t), { active: false, dirX: 0, dirZ: 0, rec: null });
+      }
+      this.loot.update(t, this.elapsed, this.camera.position);
 
       // Begegnungs-Kamera: rahmt Spieler und Wächter
       const battleId = store.get().battlePhen;
@@ -843,13 +1122,13 @@ export class GameWorld {
         const dz = cp.z - this.player.pos.z;
         const perp = new THREE.Vector3(-dz, 0, dx).normalize();
         const want = mid.clone().addScaledVector(perp, 19).add(new THREE.Vector3(0, 6.5, 0));
-        const g = this.props.groundHeight(want.x, want.z) + 0.6;
+        const g = this.groundAt(want.x, want.z) + 0.6;
         if (want.y < g) want.y = g;
         const k = 1 - Math.pow(0.02, dt);
         this.camera.position.lerp(want, k);
         this.camera.lookAt(mid.x, mid.y + 4.6, mid.z);
       } else {
-        this.player.updateCamera(this.camera, dt, (x, z) => this.props.groundHeight(x, z));
+        this.player.updateCamera(this.camera, dt, (x, z) => this.groundAt(x, z));
       }
       // Schiff wiegt vertäut sanft
       const wy = this.water.heightAt(this.ship.x, this.ship.z, t);

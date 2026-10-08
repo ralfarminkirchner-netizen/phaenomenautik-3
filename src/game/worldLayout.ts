@@ -46,7 +46,19 @@ export const ISLANDS: IslandDef[] = [
   { id: "sturmherd", x: 2100, z: 1760, radius: 200, peak: 64, seed: 1013, trees: 0, flat: 0.15 },
 ];
 
-export const ALL_LAND: IslandDef[] = [...ISLANDS, HARBOR];
+// Die Scholle: winziges Eiland südlich des Hafens — nur per Floß/Brücke erreichbar
+export const SCHOLLE: IslandDef = {
+  id: "scholle",
+  x: 2210,
+  z: 3560,
+  radius: 34,
+  peak: 7,
+  seed: 4711,
+  trees: 6,
+  flat: 0.4,
+};
+
+export const ALL_LAND: IslandDef[] = [...ISLANDS, HARBOR, SCHOLLE];
 
 /** Höhenbeitrag einer einzelnen Insel (auch negativ unter Wasser, sanfter Abfall) */
 function islandHeight(def: IslandDef, x: number, z: number): number {

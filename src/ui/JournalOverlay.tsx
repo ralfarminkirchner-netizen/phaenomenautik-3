@@ -8,6 +8,7 @@ import { NPCS } from "../game/npc";
 import { activeQuests, QUESTS } from "../game/quests";
 import { store } from "../game/store";
 import { getWorld } from "../game/runtime";
+import { MATERIALS, matName } from "../game/materials";
 
 export function JournalOverlay() {
   const [open, setOpen] = useState(store.get().journalOpen);
@@ -102,6 +103,29 @@ export function JournalOverlay() {
                 ))}
               </ul>
             )}
+          </section>
+
+          {/* Materialien */}
+          <section>
+            <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-2">Materialien ({Object.keys(save.materials).filter((k) => (save.materials[k] ?? 0) > 0).length})</h3>
+            {Object.keys(save.materials).filter((k) => (save.materials[k] ?? 0) > 0).length === 0 ? (
+              <p className="text-white/50 italic">Noch leer. Material glänzt in der Welt — Treibstämme am Strand, Seile am Steg, Federn im Wald.</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                {Object.entries(save.materials)
+                  .filter(([, n]) => (n ?? 0) > 0)
+                  .map(([id, n]) => {
+                    const def = MATERIALS.find((m) => m.id === id);
+                    return (
+                      <div key={id} className="rounded-lg bg-black/30 border border-white/10 px-2.5 py-1.5" title={def?.desc ?? ""}>
+                        <div className="text-[13px] text-white/85">{matName(id)}</div>
+                        <div className="text-[11px] text-sky-300/70">× {n} · {def?.kategorie ?? ""}</div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+            <p className="text-white/40 text-xs mt-2">Bauen mit Taste <span className="text-amber-300">T</span> — z. B. „baue floß“ (4 Treibstamm + 2 Hanseil).</p>
           </section>
 
           {/* Beziehungen */}

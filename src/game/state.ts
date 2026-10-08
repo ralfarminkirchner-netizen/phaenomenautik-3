@@ -22,6 +22,17 @@ export interface PlayerState {
 export type QuestState = "unknown" | "active" | "done";
 export type TravelMode = "sailing" | "onfoot";
 
+export interface PlacedStructure {
+  id: string;
+  type: "floss" | "leiter" | "bruecke";
+  x: number;
+  z: number;
+  yaw: number;
+  ex?: number;
+  ez?: number;
+  topY?: number;
+}
+
 export interface SaveGame {
   version: 3;
   player: PlayerState;
@@ -42,6 +53,10 @@ export interface SaveGame {
   timeOfDay: number; // 0..24
   echoesFound: string[]; // Lore-Stein-IDs
   echoDrop: { x: number; z: number; crystals: number } | null; // hinterlassenes Echo (Souls-Regel)
+  materials: Record<string, number>; // Inventar
+  lootTaken: string[]; // eingesammelte Loot-Ids
+  structures: PlacedStructure[]; // gebaute Objekte
+  chestsOpened: string[]; // Truhen-Ids
   npcMemory: Record<string, { met: boolean; topics: string[]; favors: number }>;
   quests: Record<string, QuestState>;
   questProgress: Record<string, number>;
@@ -74,6 +89,10 @@ export function newGame(): SaveGame {
     timeOfDay: 9.4,
     echoesFound: [],
     echoDrop: null,
+    materials: { stamm: 2, seil: 1 },
+    lootTaken: [],
+    structures: [],
+    chestsOpened: [],
     quests: {},
     questProgress: {},
     npcMemory: {},
@@ -132,6 +151,10 @@ export function loadSave(): SaveGame | null {
     s.echoesFound ??= [];
     s.echoDrop ??= null;
     s.crystals ??= 0;
+    s.materials ??= { stamm: 2, seil: 1 };
+    s.lootTaken ??= [];
+    s.structures ??= [];
+    s.chestsOpened ??= [];
     return s;
   } catch {
     return null;
