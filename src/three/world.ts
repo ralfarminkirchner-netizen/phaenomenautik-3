@@ -1057,8 +1057,13 @@ export class GameWorld {
     if (sailing) {
       const fwd = (this.keys.has("w") || this.keys.has("arrowup") ? 1 : 0) - (this.keys.has("s") || this.keys.has("arrowdown") ? 0.55 : 0);
       const turn = (this.keys.has("a") || this.keys.has("arrowleft") ? 1 : 0) - (this.keys.has("d") || this.keys.has("arrowright") ? 1 : 0);
-      this.ship.sailDt(dt, t, { forward: fwd, turn }, this.save.shipSpeedLevel, this.particles, (x, z) =>
-        this.water.heightAt(x, z, t),
+      this.ship.sailDt(
+        dt,
+        t,
+        { forward: fwd, turn, turbo: this.keys.has("shift") },
+        this.save.shipSpeedLevel,
+        this.particles,
+        (x, z) => this.water.heightAt(x, z, t),
       );
       // Treibholz einsammeln
       const got = this.props.collectDriftwood(this.ship.x, this.ship.z, 7.5, this.elapsed);

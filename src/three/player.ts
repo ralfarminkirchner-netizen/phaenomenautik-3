@@ -32,6 +32,7 @@ export class Player {
   grounded = true;
   private coyote = 0;
   private jumpBuf = 0;
+  private airJumps = 0;
   attackT = 0;
   dodgeT = 0;
   hitT = 0;
@@ -153,6 +154,15 @@ export class Player {
         x: this.pos.x, y: this.pos.y + 0.1, z: this.pos.z, spread: 0.5,
         vy: 1.2, life: 0.5, size: 1.4, color: [0.8, 0.78, 0.7], gravity: 4, drag: 0.94,
       });
+    } else if (this.jumpBuf > 0 && !this.grounded && this.airJumps < 1) {
+      // DOPPELSPRUNG: ein zweiter Sprung in der Luft
+      this.vel.y = JUMP_VEL * 0.92;
+      this.airJumps++;
+      this.jumpBuf = 0;
+      particles.burst(12, {
+        x: this.pos.x, y: this.pos.y + 0.2, z: this.pos.z, spread: 0.9,
+        vy: 0.6, life: 0.6, size: 1.8, color: [0.85, 0.9, 1.0], gravity: 2, drag: 0.94,
+      });
     }
 
     this.vel.y -= GRAVITY * dt;
@@ -189,6 +199,7 @@ export class Player {
       this.pos.y = ground;
       this.vel.y = 0;
       this.grounded = true;
+      this.airJumps = 0;
     } else if (this.pos.y - ground > 0.05) {
       this.grounded = false;
     }

@@ -150,7 +150,7 @@ export function HUD() {
       {!overlayOpen && (
       <div className="absolute bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-white/40 text-center">
         {h.mode === "sailing"
-          ? "W/S Segel · A/D Ruder · Maus Umschauen · E Anlegen"
+          ? "W/S Segel · A/D Ruder · Shift Turbo · Maus Umschauen · E Anlegen"
           : "WASD Laufen · Shift Sprint · Leertaste Sprung · Klick Axt · Q Ausweichen · E Interaktion · J Journal · T Bauen"}
       </div>
       )}

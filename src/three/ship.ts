@@ -20,6 +20,8 @@ export class Ship {
   private wake: THREE.Mesh;
   private wakeMat: THREE.ShaderMaterial;
   moored = false;
+  private sailNodes: THREE.Object3D[] = [];
+  private sailAmount = 1;
 
   constructor(scene: THREE.Scene) {
     const model = getModel("ship").scene.clone(true);
@@ -34,6 +36,10 @@ export class Ship {
     model.rotation.y = MODEL_YAW;
     setShadows(model, true, false);
     this.group.add(model);
+    // Segel-Knoten für Einholen/Aussetzen
+    model.traverse((o) => {
+      if (["BackSail", "Front Sail", "MidleSail"].includes(o.name)) this.sailNodes.push(o);
+    });
 
     scene.add(this.group);
 
@@ -70,7 +76,7 @@ export class Ship {
   sailDt(
     dt: number,
     t: number,
-    input: { forward: number; turn: number },
+    input: { forward: number; turn: number; turbo: boolean },
     speedLevel: number,
     particles: ParticleSystem,
     waveY: (x: number, z: number) => number,
@@ -78,12 +84,12 @@ export class Ship {
     if (this.moored) {
       input = { forward: 0, turn: 0 };
     }
-    const maxSpeed = 24 + speedLevel * 5;
+    const maxSpeed = (24 + speedLevel * 5) * (input.turbo ? 1.6 : 1);
     const accel = 14;
     const target = input.forward * maxSpeed;
     this.speed = Math.abs(this.speed - target) < accel * dt ? target : this.speed + Math.sign(target - this.speed) * accel * dt;
     const turnRate = 0.85 * clamp(Math.abs(this.speed) / maxSpeed + 0.15, 0, 1) * Math.sign(this.speed || 1);
-    this.heading -= input.turn * turnRate * dt;
+    this.heading += input.turn * turnRate * dt;
     this.turnLean = lerp(this.turnLean, input.turn * clamp(Math.abs(this.speed) / maxSpeed, 0, 1), dt * 4);
 
     const nx = this.x - Math.sin(this.heading) * this.speed * dt;
@@ -114,6 +120,14 @@ export class Ship {
     this.group.rotateY(this.heading);
     this.group.rotateX(Math.atan2(yStern - yBow, 10) * 0.8);
     this.group.rotateZ(Math.atan2(yStar - yPort, 5) * 0.7 + this.turnLean * 0.14);
+
+    // Segel: steht das Schiff → eingerollt; Fahrt → gesetzt
+    const targetSail = this.moored ? 0.12 : 0.25 + 0.75 * clamp(Math.abs(this.speed) / maxSpeed, 0, 1);
+    this.sailAmount = lerp(this.sailAmount, targetSail, dt * 2.5);
+    for (const sn of this.sailNodes) {
+      sn.scale.y = Math.max(0.08, this.sailAmount);
+      sn.scale.x = 0.7 + 0.3 * this.sailAmount;
+    }
 
     const strength = clamp(Math.abs(this.speed) / maxSpeed, 0, 1);
     this.wakeMat.uniforms.uTime.value = t;
