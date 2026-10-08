@@ -30,6 +30,8 @@ export interface HudState {
   journalOpen: boolean;
   loreStone: string | null; // Id des offenen Lore-Steins
   chatOpen: boolean;
+  cookOpen: boolean; // Koch-UI am Feuer (M3)
+  meals: { name: string; kind: string; secondsLeft: number; crash: boolean }[]; // aktive Essens-Wirkungen
   damageFlash: number; // 0..1 roter Vignetten-Blitz
   fireBuffUntil: number; // Timestamp (performance.now), 0 = kein Buff
 }
@@ -64,6 +66,8 @@ export const initialHud: HudState = {
   journalOpen: false,
   loreStone: null,
   chatOpen: false,
+  cookOpen: false,
+  meals: [],
   damageFlash: 0,
   fireBuffUntil: 0,
 };

@@ -86,7 +86,7 @@ function Bar({ value, max, color, label }: { value: number; max: number; color: 
 export function HUD() {
   const h = useHud();
   if (h.mode === "title") return null;
-  const overlayOpen = !!(h.dialogNpc || h.battlePhen || h.journalOpen || h.loreStone);
+  const overlayOpen = !!(h.dialogNpc || h.battlePhen || h.journalOpen || h.loreStone || h.cookOpen);
 
   const hh = Math.floor(h.timeOfDay);
   const mm = Math.floor((h.timeOfDay - hh) * 60);
@@ -123,6 +123,27 @@ export function HUD() {
         <Bar value={h.presence} max={h.maxPresence} color="bg-gradient-to-r from-sky-400 to-indigo-400" label="Präsenz" />
         <Bar value={h.stamina} max={h.maxStamina} color="bg-gradient-to-r from-amber-400 to-lime-400" label="Ausdauer" />
         <div className="text-[10px] text-white/60 uppercase tracking-wider">Stufe {h.level}</div>
+        {/* Aktive Essens-Wirkungen */}
+        {h.meals.length > 0 && (
+          <div className="flex flex-col gap-1 mt-1">
+            {h.meals.map((m, i) => (
+              <div
+                key={i}
+                className={`flex items-center gap-1.5 text-[10px] rounded-full px-2 py-0.5 border w-fit ${
+                  m.crash ? "bg-rose-900/60 border-rose-400/40 text-rose-200" : "bg-black/40 border-white/15 text-white/75"
+                }`}
+                title={m.name}
+              >
+                <span>{m.kind === "energie" ? "⚡" : m.kind === "konzentration" ? "🧠" : "🌿"}</span>
+                <span className="max-w-[130px] truncate">{m.name}</span>
+                <span className="tabular-nums">
+                  {m.crash ? "📉" : ""}
+                  {Math.floor(m.secondsLeft / 60)}:{String(m.secondsLeft % 60).padStart(2, "0")}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Ressourcen unten rechts */}

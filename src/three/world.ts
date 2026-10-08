@@ -23,6 +23,7 @@ import { LoreStones } from "./lorestones";
 import { Creature } from "./creature";
 import { CliffWalls } from "./cliffwalls";
 import { CLIMB_WALLS, cliffTopAt } from "../game/climb";
+import { computeDish, mealsToActive, mealBonus, pruneMeals, type DishResult } from "../game/cooking";
 import { shrinePoint } from "../game/worldLayout";
 import { PHENOMENA } from "../game/data";
 import { audio } from "../game/audio";
@@ -257,7 +258,7 @@ export class GameWorld {
 
   get uiLock(): boolean {
     const st = store.get();
-    return !!(st.menuOpen || st.dead || st.dialogNpc || st.battlePhen || st.journalOpen || st.loreStone || st.chatOpen);
+    return !!(st.menuOpen || st.dead || st.dialogNpc || st.battlePhen || st.journalOpen || st.loreStone || st.chatOpen || st.cookOpen);
   }
 
   // ── Eingaben ─────────────────────────────────────────────────────
@@ -289,12 +290,15 @@ export class GameWorld {
         this.cancelBuild();
       } else if (st.chatOpen) {
         store.set({ chatOpen: false });
+      } else if (st.cookOpen) {
+        store.set({ cookOpen: false });
       } else if (st.journalOpen || st.dialogNpc || st.loreStone) {
         store.set({ journalOpen: false, dialogNpc: null, loreStone: null });
       } else if (!st.battlePhen) {
         store.set({ menuOpen: !st.menuOpen });
       }
     }
+    if (k === "k") this.tryCookOpen();
   };
   private onKeyUp = (e: KeyboardEvent) => this.keys.delete(e.key.toLowerCase());
 
@@ -510,7 +514,7 @@ export class GameWorld {
       if ((this.save.materials["eimer"] ?? 0) > 0) {
         this.currentPrompt = {
           key: "E",
-          text: "Rasten + Eimer-Wasser erwärmen (→ Warmes Wasser)",
+          text: "Rasten + Eimer-Wasser erwärmen (→ Warmes Wasser) · [K] Kochen",
           action: () => {
             this.restAtFire();
             this.save.player.items.wasser = (this.save.player.items.wasser ?? 0) + 1;
@@ -520,7 +524,7 @@ export class GameWorld {
       } else {
         this.currentPrompt = {
           key: "E",
-          text: this.save.wood >= 1 ? "Rasten: Kraft ins Feuer (1 Holz → Stärkung)" : "Rasten (Stabilität auffrischen)",
+          text: (this.save.wood >= 1 ? "Rasten: Kraft ins Feuer (1 Holz → Stärkung)" : "Rasten (Stabilität auffrischen)") + " · [K] Kochen",
           action: () => this.restAtFire(),
         };
       }
@@ -576,6 +580,49 @@ export class GameWorld {
       store.toast("Du rastest am Feuer. Stabilität kehrt zurück.", "good");
     }
     this.persist();
+  }
+
+  /** Kochen öffnen (Taste K): nur an einem brennenden Feuer */
+  private tryCookOpen() {
+    if (this.uiLock) return;
+    if (this.save.mode !== "onfoot") return;
+    const p = this.player.pos;
+    const fire = this.props.nearestFire(p.x, p.z, 4.0);
+    if (fire && fire.lit) {
+      store.set({ cookOpen: true });
+      if (document.pointerLockElement) document.exitPointerLock();
+    } else {
+      store.toast("Kochen geht nur an einem brennenden Feuer.", "info");
+    }
+  }
+
+  /** Gericht kochen & essen: Zutaten verbrauchen, Wirkung aktivieren, Rezept lernen */
+  cookDish(ids: string[]): DishResult | null {
+    const dish = computeDish(ids);
+    if (!dish) return null;
+    // Vorrat prüfen & verbrauchen
+    const need: Record<string, number> = {};
+    for (const id of ids) need[id] = (need[id] ?? 0) + 1;
+    for (const [id, n] of Object.entries(need)) {
+      if ((this.save.food[id] ?? 0) < n) return null;
+    }
+    for (const [id, n] of Object.entries(need)) {
+      this.save.food[id] -= n;
+      if (this.save.food[id] <= 0) delete this.save.food[id];
+    }
+    // Wirkung aktivieren
+    const now = Date.now();
+    this.save.activeMeals = pruneMeals(this.save.activeMeals, now).concat(mealsToActive(dish, now));
+    this.save.mealsCooked++;
+    // Rezept lernen
+    if (dish.matchedRecipeId && !this.save.recipesFound.includes(dish.matchedRecipeId)) {
+      this.save.recipesFound.push(dish.matchedRecipeId);
+      store.toast(`„${dish.name}" — diese Kombination wirkt. Notiert im Journal.`, "good");
+    } else {
+      store.toast(`„${dish.name}" — gut gekocht.`, "good");
+    }
+    this.persist();
+    return dish;
   }
 
   private chop(tree: TreeRec) {
@@ -1115,6 +1162,9 @@ export class GameWorld {
       });
 
       // Ausdauer-Buchhaltung: Sprint kostet, Stillstand/Gehen regeneriert
+      // (Essens-Wirkung „Energie" verstärkt, Zucker-Crash schwächt die Regeneration)
+      const nowMs0 = Date.now();
+      const eBonus = mealBonus(this.save.activeMeals, "energie", nowMs0);
       if (this.player.climbing) {
         // drain läuft bereits über den Kletter-Kontext
       } else if (input.sprint && this.player.speed2D > 3 && !paddling) {
@@ -1122,7 +1172,8 @@ export class GameWorld {
         pl.stamina = Math.max(0, pl.stamina - 4.5 * dt);
       } else {
         this.staminaDelay = Math.max(0, this.staminaDelay - dt);
-        if (this.staminaDelay <= 0) pl.stamina = Math.min(pl.maxStamina, pl.stamina + 6.5 * dt);
+        if (this.staminaDelay <= 0)
+          pl.stamina = Math.min(pl.maxStamina, pl.stamina + 6.5 * (1 + eBonus) * dt);
       }
 
       // Bau-Geist folgt dem Spieler
@@ -1283,7 +1334,31 @@ export class GameWorld {
         fps: Math.round(this.fpsEma),
         fireBuffUntil: this.fireBuffUntil,
         damageFlash: Math.max(0, store.get().damageFlash - 0.34),
+        meals: this.save.activeMeals.map((m) => {
+          const nowMs = Date.now();
+          const crashing = m.expiresAt <= nowMs && m.crashExpiresAt !== undefined && nowMs < m.crashExpiresAt;
+          return {
+            name: m.name,
+            kind: m.kind,
+            secondsLeft: Math.max(0, Math.round(((crashing ? m.crashExpiresAt! : m.expiresAt) - nowMs) / 1000)),
+            crash: crashing,
+          };
+        }),
       });
+    }
+
+    // Essens-Wirkungen (M3): passive Regeneration durch Mahlzeiten —
+    // Konzentration → Präsenz, Regulation → Stabilität (modest, max. %/s)
+    {
+      const nowMs = Date.now();
+      this.save.activeMeals = pruneMeals(this.save.activeMeals, nowMs);
+      if (this.save.activeMeals.length) {
+        const p = this.save.player;
+        const konz = mealBonus(this.save.activeMeals, "konzentration", nowMs);
+        if (konz > 0) p.presence = Math.min(p.maxPresence, p.presence + p.maxPresence * konz * 0.02 * dt);
+        const regu = mealBonus(this.save.activeMeals, "regulation", nowMs);
+        if (regu > 0) p.stability = Math.min(p.maxStability, p.stability + p.maxStability * regu * 0.02 * dt);
+      }
     }
 
     // Autosave
