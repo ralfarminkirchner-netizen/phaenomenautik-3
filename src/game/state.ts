@@ -2,6 +2,7 @@
 
 import { PHENOMENA, levelForXp, maxPresence, maxStability, maxStamina } from "./data";
 import { HARBOR, ISLANDS } from "./worldLayout";
+import type { ActiveMeal } from "./cooking";
 
 export interface IslandState {
   id: string;
@@ -63,6 +64,11 @@ export interface SaveGame {
   quests: Record<string, QuestState>;
   questProgress: Record<string, number>;
   visitedArchipelagos: string[];
+  // Küche & Ernährung (M3)
+  food: Record<string, number>; // Zutaten-Inventar (Zutat → Anzahl Portionen)
+  activeMeals: ActiveMeal[]; // laufende Essens-Wirkungen
+  recipesFound: string[]; // gelernte Rezept-Ids
+  mealsCooked: number; // Statistik für Experiment-Freischaltung
 }
 
 const SAVE_KEY = "phaenomenautik3-save-v1";
@@ -99,6 +105,10 @@ export function newGame(): SaveGame {
     questProgress: {},
     npcMemory: {},
     visitedArchipelagos: [],
+    food: { apfel: 2, heidelbeere: 1 },
+    activeMeals: [],
+    recipesFound: [],
+    mealsCooked: 0,
   };
 }
 
@@ -164,6 +174,10 @@ export function loadSave(): SaveGame | null {
     s.chestsOpened ??= [];
     s.player.maxStamina ??= maxStamina(s.player.level);
     s.player.stamina ??= s.player.maxStamina;
+    s.food ??= { apfel: 2, heidelbeere: 1 };
+    s.activeMeals ??= [];
+    s.recipesFound ??= [];
+    s.mealsCooked ??= 0;
     return s;
   } catch {
     return null;
