@@ -1,6 +1,9 @@
 // PHÄNOMENAUTIK 3 — Wasser: Gerstner-Wellen + Detail-Normalen + Tiefenfarbe
-// + Küstenbrandung + Kammschaum. Behebt gezielt die V2-Mängel:
-// große lesbare Wellen, Noise-Normalmaps gegen „flach", Schaum gegen „klinisch".
+// + Küstenbrandung + Kammschaum + planare Echtzeit-Reflexion (Qualität „Hoch",
+// Messlatte: traumaatlas-3-Ozean) + Nebel-Anbindung (kein Horizont-Pop im Sturm).
+// Behebt gezielt die V2/V3-Mängel: große lesbare Wellen, Noise-Normalmaps gegen
+// „flach", Schaum gegen „klinisch", Glitzer mit Rauschmaske + Distanz gegen
+// Funkelflimmern, Nebel gegen sichtbare Ebenen-Kante.
 
 import * as THREE from "three";
 import { WAVES_GLSL, waveHeight } from "./waves";
@@ -9,10 +12,12 @@ import { clamp } from "../game/noise";
 
 const WATER_VERT = /* glsl */ `
 uniform float uTime;
+uniform mat4 uTextureMatrix;
 ${WAVES_GLSL}
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying float vCrest;
+varying vec4 vRefl;
 void main() {
   vec2 p = (modelMatrix * vec4(position, 1.0)).xz;
   vec3 nrm; float crest;
@@ -20,26 +25,33 @@ void main() {
   vWorld = vec3(disp.x, disp.y, disp.z);
   vNormal = nrm;
   vCrest = crest;
+  vRefl = uTextureMatrix * vec4(vWorld, 1.0);
   gl_Position = projectionMatrix * viewMatrix * vec4(vWorld, 1.0);
 }
 `;
 
 const WATER_FRAG = /* glsl */ `
 uniform float uTime;
-uniform sampler2D uNormals;   // Kachel-Noise-Normalmap
+uniform sampler2D uNormals;   // Kachel-Noise-Normalmap (A: Höhenrauschen)
 uniform sampler2D uTerrain;   // gebackene Terrainhöhe (R: kodiert)
+uniform sampler2D tReflect;   // planare Reflexion (RenderTarget)
+uniform float uReflOn;        // 1 = planare Reflexion aktiv
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
 uniform vec3 uZenith;
 uniform vec3 uHorizon;
 uniform vec3 uDeep;
 uniform vec3 uShallow;
+uniform vec3 uFogColor;
+uniform float uFogNear;
+uniform float uFogFar;
 uniform float uNight;
 uniform float uStorm;
 uniform float uWorldSize;
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying float vCrest;
+varying vec4 vRefl;
 
 float decodeHeight(vec2 worldXZ) {
   vec2 uv = worldXZ / uWorldSize;
@@ -77,15 +89,46 @@ void main() {
             * clamp(vWorld.y * 0.6 + 0.35, 0.0, 1.0);
   waterCol += uSunColor * sss * 0.10 * (1.0 - uNight * 0.85);
 
-  // Fresnel → Himmelsreflexion
+  // Nacht abdunkeln: nur den Wasserkörper — die Reflexion (analytisch wie
+  // planar) trägt die Nacht bereits in ihren Farben, doppeltes Dimmen
+  // erzeugt schwarze Schmiere auf streifenden Blickwinkeln.
+  waterCol *= (1.0 - uNight * 0.72);
+
+  // Fresnel → Himmels-/Spiegelreflexion. Maximalgewicht < 1: Die Körperfarbe
+  // des Meeres bleibt immer präsent — das Meer bleibt blau statt milchig.
   float fres = pow(1.0 - max(dot(view, nrm), 0.0), 5.0);
   fres = mix(0.035, 1.0, fres);
   vec3 refl = skyColor(reflect(-view, nrm));
-  vec3 col = mix(waterCol, refl, clamp(fres * 1.15, 0.0, 1.0));
+  // Planare Reflexion: projektives Sampling, Wellen-Distortion, Randmaske.
+  // Zwei weiche Grenzen: Frustum-Rand breit ausgefedert (keine sichtbare
+  // Kante) und Distanz-Fade — in der Ferne reicht der analytische Himmel,
+  // die Plane lohnt sich nur dort, wo sie Objekte spiegelt (Schiff, Inseln).
+  if (uReflOn > 0.5) {
+    vec2 ruv = vRefl.xy / max(vRefl.w, 1e-4);
+    ruv += nrm.xz * 0.035;
+    vec2 inEdge = smoothstep(0.0, 0.14, ruv) * (1.0 - smoothstep(0.86, 1.0, ruv));
+    float mask = inEdge.x * inEdge.y;
+    mask *= smoothstep(750.0, 180.0, dist);
+    // Nachts spiegelt die Plane fast nur dunklen Himmel — die Helligkeits-
+    // differenz zum analytischen Himmel zeichnet den Frustum-Keil ab.
+    // Plane dimmen: Objektreflexionen (Feuer, Inseln) bleiben, der Keil nicht.
+    mask *= 1.0 - uNight * 0.6;
+    vec3 planar = texture2D(tReflect, clamp(ruv, vec2(0.002), vec2(0.998))).rgb;
+    refl = mix(refl, planar, mask * 0.92);
+  }
+  // Sturm: die See streut statt zu spiegeln — Reflexion zurücknehmen
+  vec3 col = mix(waterCol, refl, min(fres * 1.15, 0.88) * (1.0 - uStorm * 0.35));
 
-  // Sonnenglitzer (Blinn-Specular, scharf; mit Distanz gedämpft gegen Funkelflimmern)
+  // Ambienter Indigo-Lift: Schattenseite kippt nie zu Plastik-Schwarz
+  col += vec3(0.040, 0.062, 0.105) * (1.0 - fres) * (0.30 + uNight * 0.45 + uStorm * 0.25);
+
+  // Sonnenglitzer: scharfer Term mit Rauschmaske (bricht gleichmäßiges Funkeln),
+  // weiter Term für die Bahn; beides mit Distanz gedämpft gegen Funkelflimmern.
   vec3 half_ = normalize(view + uSunDir);
-  float spec = pow(max(dot(nrm, half_), 0.0), 640.0) * 3.2 + pow(max(dot(nrm, half_), 0.0), 90.0) * 0.5;
+  float dh = max(dot(nrm, half_), 0.0);
+  float sparkle = texture2D(uNormals, vWorld.xz * 0.6 + vec2(uTime * 0.05, -uTime * 0.041)).w;
+  float sparkleMask = 0.30 + 0.70 * smoothstep(0.35, 0.75, sparkle);
+  float spec = pow(dh, 640.0) * 3.2 * sparkleMask + pow(dh, 90.0) * 0.5;
   col += uSunColor * spec * (1.0 - uNight * 0.9) * (1.0 - uStorm * 0.4) * mix(0.35, 1.0, detailFade);
 
   // ── Schaum ──
@@ -105,8 +148,11 @@ void main() {
   float alpha = mix(0.94, 0.45, shallowMix);
   alpha = clamp(alpha + foam * 0.35 + fres * 0.3, 0.0, 0.97);
 
-  // Nacht abdunkeln
-  col *= (1.0 - uNight * 0.72);
+  // Nebel wie die Szene (linear): ferne Flächen gehen in Fog-Farbe auf und
+  // werden deckend — die Ebenen-Kante am Horizont verschwindet im Dunst.
+  float fogF = clamp((uFogFar - dist) / max(uFogFar - uFogNear, 1.0), 0.0, 1.0);
+  col = mix(uFogColor, col, fogF);
+  alpha = mix(0.97, alpha, fogF);
 
   gl_FragColor = vec4(col, alpha);
 }
@@ -152,7 +198,7 @@ function makeNormalTexture(size = 256): THREE.DataTexture {
       const hl = h[y * size + ((x - 1 + size) % size)];
       const hr = h[y * size + ((x + 1) % size)];
       const hd = h[((y - 1 + size) % size) * size + x];
-      const hu = h[((y + 1) % size) * size + x];
+      const hu = h[((y + 1 + size) % size) * size + x];
       let nx = (hl - hr) * str;
       let ny = (hd - hu) * str;
       let nz = 1;
@@ -164,7 +210,7 @@ function makeNormalTexture(size = 256): THREE.DataTexture {
       data[i] = (nx * 0.5 + 0.5) * 255;
       data[i + 1] = (ny * 0.5 + 0.5) * 255;
       data[i + 2] = (nz * 0.5 + 0.5) * 255;
-      data[i + 3] = h[y * size + x] * 255; // Höhe als Schaum-Noise
+      data[i + 3] = h[y * size + x] * 255; // Höhe als Schaum-/Glitzer-Noise
     }
   }
   const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
@@ -200,12 +246,62 @@ function makeTerrainTexture(size = 1024): THREE.DataTexture {
   return tex;
 }
 
+// ── Planare Reflexion: gespiegelte Kamera + obliquer Near-Clip an y=0 ────────
+
+const CLIP_BIAS = 0.004;
+const _plane = new THREE.Plane();
+const _clip = new THREE.Vector4();
+const _q = new THREE.Vector4();
+const _look = new THREE.Vector3();
+const _up = new THREE.Vector3();
+const _target = new THREE.Vector3();
+const _bias = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
+
+/** Spiegelt die Kamera an der Ebene y=0 und setzt den obliquen Near-Clip. */
+function updateMirrorCam(src: THREE.Camera, mirror: THREE.PerspectiveCamera, texMatrix: THREE.Matrix4) {
+  _look.set(0, 0, -1).applyQuaternion(src.quaternion);
+  _up.set(0, 1, 0).applyQuaternion(src.quaternion);
+  mirror.position.set(src.position.x, -src.position.y, src.position.z);
+  _look.y *= -1;
+  _up.y *= -1;
+  _target.copy(mirror.position).add(_look);
+  mirror.up.copy(_up);
+  mirror.lookAt(_target);
+  mirror.updateMatrixWorld();
+
+  const srcP = (src as THREE.PerspectiveCamera).projectionMatrix;
+  mirror.projectionMatrix.copy(srcP);
+
+  _plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 0));
+  _plane.applyMatrix4(mirror.matrixWorldInverse);
+  _clip.set(_plane.normal.x, _plane.normal.y, _plane.normal.z, _plane.constant);
+  const pm = mirror.projectionMatrix.elements;
+  _q.set(
+    (Math.sign(_clip.x) + pm[8]) / pm[0],
+    (Math.sign(_clip.y) + pm[9]) / pm[5],
+    -1,
+    (1 + pm[10]) / pm[14],
+  );
+  _clip.multiplyScalar(2 / _clip.dot(_q));
+  pm[2] = _clip.x;
+  pm[6] = _clip.y;
+  pm[10] = _clip.z + 1 - CLIP_BIAS;
+  pm[14] = _clip.w;
+  mirror.projectionMatrixInverse.copy(mirror.projectionMatrix).invert();
+
+  texMatrix.copy(_bias).multiply(mirror.projectionMatrix).multiply(mirror.matrixWorldInverse);
+}
+
 export class Water {
   mesh: THREE.Mesh;
   private mat: THREE.ShaderMaterial;
   private hiGeo: THREE.PlaneGeometry;
   private loGeo: THREE.PlaneGeometry;
   private useHi = true;
+  private reflRT: THREE.WebGLRenderTarget;
+  private mirrorCam: THREE.PerspectiveCamera;
+  private texMatrix = new THREE.Matrix4();
+  private reflEnabled = true;
   stormAmp = 1;
 
   constructor(scene: THREE.Scene) {
@@ -214,6 +310,14 @@ export class Water {
     this.hiGeo.rotateX(-Math.PI / 2);
     this.loGeo = new THREE.PlaneGeometry(RADIUS * 2, RADIUS * 2, 110, 110);
     this.loGeo.rotateX(-Math.PI / 2);
+
+    this.reflRT = new THREE.WebGLRenderTarget(960, 540, {
+      type: THREE.HalfFloatType,
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+    });
+    this.mirrorCam = new THREE.PerspectiveCamera();
+    this.mirrorCam.matrixAutoUpdate = false;
 
     this.mat = new THREE.ShaderMaterial({
       vertexShader: WATER_VERT,
@@ -225,12 +329,18 @@ export class Water {
         uStormAmp: { value: 1 },
         uNormals: { value: makeNormalTexture(256) },
         uTerrain: { value: makeTerrainTexture(1024) },
+        tReflect: { value: this.reflRT.texture },
+        uTextureMatrix: { value: this.texMatrix },
+        uReflOn: { value: 0 },
         uSunDir: { value: new THREE.Vector3(0, 1, 0) },
         uSunColor: { value: new THREE.Color(1, 1, 1) },
         uZenith: { value: new THREE.Color(0.2, 0.4, 0.7) },
         uHorizon: { value: new THREE.Color(0.7, 0.85, 0.9) },
         uDeep: { value: new THREE.Color(0.015, 0.09, 0.16) },
         uShallow: { value: new THREE.Color(0.12, 0.5, 0.5) },
+        uFogColor: { value: new THREE.Color(0.7, 0.85, 0.9) },
+        uFogNear: { value: 340 },
+        uFogFar: { value: 1900 },
         uNight: { value: 0 },
         uStorm: { value: 0 },
         uWorldSize: { value: WORLD_SIZE },
@@ -242,11 +352,43 @@ export class Water {
     scene.add(this.mesh);
   }
 
-  /** Qualitätsumschaltung (Performance-Budget) */
+  /** Qualitätsumschaltung (Performance-Budget). „lo" schaltet auch die
+   *  planare Reflexion ab — der analytische Himmel bleibt als Reflexion. */
   setHighQuality(hi: boolean) {
+    this.reflEnabled = hi;
     if (hi === this.useHi) return;
     this.useHi = hi;
     this.mesh.geometry = hi ? this.hiGeo : this.loGeo;
+  }
+
+  /** Reflexions-Target an den Viewport koppeln (halbe Auflösung). */
+  setReflSize(wCss: number, hCss: number, pixelRatio: number) {
+    this.reflRT.setSize(
+      Math.max(256, Math.floor(wCss * pixelRatio * 0.5)),
+      Math.max(256, Math.floor(hCss * pixelRatio * 0.5)),
+    );
+  }
+
+  /** Reflexions-Pass: Szene aus gespiegelter Kamera ins RT. Tone Mapping für
+   *  den Pass AUS — das RT hält lineare Werte, sonst doppelt getont. */
+  renderReflection(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.PerspectiveCamera) {
+    const u = this.mat.uniforms;
+    if (!this.reflEnabled || camera.position.y < 0.6) {
+      u.uReflOn.value = 0;
+      return;
+    }
+    u.uReflOn.value = 1;
+    updateMirrorCam(camera, this.mirrorCam, this.texMatrix);
+    this.mesh.visible = false;
+    const prevRT = renderer.getRenderTarget();
+    const prevTone = renderer.toneMapping;
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.setRenderTarget(this.reflRT);
+    renderer.clear();
+    renderer.render(scene, this.mirrorCam);
+    renderer.setRenderTarget(prevRT);
+    renderer.toneMapping = prevTone;
+    this.mesh.visible = true;
   }
 
   update(
@@ -258,6 +400,7 @@ export class Water {
     zenith: THREE.Color,
     horizon: THREE.Color,
     night: number,
+    fog: THREE.Fog,
   ) {
     // Ebene folgt dem Kamerazentrum (auf 8m-Raster gerastert, gegen Textur-Swimmen)
     const gx = Math.round(center.x / 8) * 8;
@@ -273,6 +416,9 @@ export class Water {
     (u.uSunColor.value as THREE.Color).copy(sunColor);
     (u.uZenith.value as THREE.Color).copy(zenith);
     (u.uHorizon.value as THREE.Color).copy(horizon);
+    (u.uFogColor.value as THREE.Color).copy(fog.color);
+    u.uFogNear.value = fog.near;
+    u.uFogFar.value = fog.far;
   }
 
   /** CPU-Wellenhöhe (Schiff, Bojen) */

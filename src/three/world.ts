@@ -64,6 +64,7 @@ export class GameWorld {
   private saveTimer = 0;
   private fpsEma = 60;
   private qualityLevel = 0; // 0 = voll, 1 = PR 1.25, 2 = PR 1 + Wasser lo, 3 = Schatten aus
+  private reflFrame = 0; // Zähler für 30-Hz-Spiegelpass
   private qualityTimer = 0;
 
   // Kampf
@@ -123,6 +124,7 @@ export class GameWorld {
 
     this.sky = new Sky(this.scene);
     this.water = new Water(this.scene);
+    this.water.setReflSize(container.clientWidth, container.clientHeight, this.renderer.getPixelRatio());
     new Terrain(this.scene);
     this.props = new Props(this.scene);
     this.ship = new Ship(this.scene);
@@ -329,6 +331,7 @@ export class GameWorld {
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
     this.composer?.setSize(w, h);
+    this.water?.setReflSize(w, h, this.renderer.getPixelRatio());
   };
 
   private bindInput() {
@@ -1173,7 +1176,17 @@ export class GameWorld {
     const sunDir = sunDirection(this.save.timeOfDay, new THREE.Vector3());
     const pal = paletteFor(this.save.timeOfDay, this.storm);
     this.sky.update(t, this.save.timeOfDay, this.storm, this.camera.position, focus);
-    this.water.update(t, this.camera.position, this.storm, sunDir, pal.sunColor, pal.zenith, pal.horizon, pal.night);
+    this.water.update(
+      t,
+      this.camera.position,
+      this.storm,
+      sunDir,
+      pal.sunColor,
+      pal.zenith,
+      pal.horizon,
+      pal.night,
+      this.scene.fog as THREE.Fog,
+    );
     this.props.update(t, dt, this.elapsed, this.particles, (x, z) => this.water.heightAt(x, z, t), this.camera.position);
     this.particles.update(dt);
 
@@ -1250,6 +1263,10 @@ export class GameWorld {
 
     this.updateClouds(dt, focus);
     this.bloom.enabled = this.qualityLevel < 3;
+    // Planare Wasser-Reflexion (Qualität Hoch): Spiegel-Pass vor dem Hauptbild,
+    // jeden 2. Frame — Wellen bewegen sich langsam genug für 30 Hz-Spiegel
+    if (this.qualityLevel < 2 && (this.reflFrame++ & 1) === 0)
+      this.water.renderReflection(this.renderer, this.scene, this.camera);
     this.composer.render();
   };
 
