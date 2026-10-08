@@ -3,7 +3,7 @@
 // unter Bäumen, Harz an Kiefern …) mit sanftem Schweben und Aufheben.
 
 import * as THREE from "three";
-import { ALL_LAND, HARBOR, terrainHeight, terrainSlope } from "../game/worldLayout";
+import { ALL_LAND, terrainHeight, terrainSlope } from "../game/worldLayout";
 import { mulberry32 } from "../game/noise";
 import { matById } from "../game/materials";
 

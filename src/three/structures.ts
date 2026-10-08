@@ -4,7 +4,6 @@
 
 import * as THREE from "three";
 import { terrainHeight } from "../game/worldLayout";
-import { clamp } from "../game/noise";
 import type { PlacedStructure } from "../game/state";
 
 export type { PlacedStructure };

@@ -82,7 +82,7 @@ export class Ship {
     waveY: (x: number, z: number) => number,
   ): { blocked: boolean } {
     if (this.moored) {
-      input = { forward: 0, turn: 0 };
+      input = { forward: 0, turn: 0, turbo: false };
     }
     const maxSpeed = (24 + speedLevel * 5) * (input.turbo ? 1.6 : 1);
     const accel = 14;

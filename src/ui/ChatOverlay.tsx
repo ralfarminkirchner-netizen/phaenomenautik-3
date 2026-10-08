@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { store } from "../game/store";
 import { getWorld } from "../game/runtime";
-import { parseBuildCommand, missingMaterials, matCostText, matName } from "../game/materials";
+import { parseBuildCommand, missingMaterials, matName } from "../game/materials";
 import { audio } from "../game/audio";
 
 interface Line {
