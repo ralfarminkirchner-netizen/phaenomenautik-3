@@ -121,6 +121,7 @@ export function HUD() {
       <div className="absolute bottom-5 left-5 flex flex-col gap-2">
         <Bar value={h.stability} max={h.maxStability} color="bg-gradient-to-r from-teal-400 to-emerald-400" label="Stabilität" />
         <Bar value={h.presence} max={h.maxPresence} color="bg-gradient-to-r from-sky-400 to-indigo-400" label="Präsenz" />
+        <Bar value={h.stamina} max={h.maxStamina} color="bg-gradient-to-r from-amber-400 to-lime-400" label="Ausdauer" />
         <div className="text-[10px] text-white/60 uppercase tracking-wider">Stufe {h.level}</div>
       </div>
 
@@ -151,7 +152,7 @@ export function HUD() {
       <div className="absolute bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-white/40 text-center">
         {h.mode === "sailing"
           ? "W/S Segel · A/D Ruder · Shift Turbo · Maus Umschauen · E Anlegen"
-          : "WASD Laufen · Shift Sprint · Leertaste Sprung · Klick Axt · Q Ausweichen · E Interaktion · J Journal · T Bauen"}
+          : "WASD Laufen · Shift Sprint · Leertaste Sprung · Klick Axt · Q Ausweichen · E Interaktion · J Journal · T Bauen · Mooswände klettern"}
       </div>
       )}
 

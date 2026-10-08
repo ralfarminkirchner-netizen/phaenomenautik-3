@@ -1,6 +1,6 @@
 // PHÄNOMENAUTIK 3 — Spielstand & Persistenz (v3: See/Land, Holz, Waffe)
 
-import { PHENOMENA, levelForXp, maxPresence, maxStability } from "./data";
+import { PHENOMENA, levelForXp, maxPresence, maxStability, maxStamina } from "./data";
 import { HARBOR, ISLANDS } from "./worldLayout";
 
 export interface IslandState {
@@ -16,6 +16,8 @@ export interface PlayerState {
   maxStability: number;
   presence: number;
   maxPresence: number;
+  stamina: number; // Ausdauer: Sprint & Klettern (M3)
+  maxStamina: number;
   items: Record<string, number>;
 }
 
@@ -104,6 +106,7 @@ export function freshPlayer(xp: number): PlayerState {
   const level = levelForXp(xp);
   const maxS = maxStability(level);
   const maxP = maxPresence(level);
+  const maxSt = maxStamina(level);
   return {
     xp,
     level,
@@ -111,6 +114,8 @@ export function freshPlayer(xp: number): PlayerState {
     maxStability: maxS,
     presence: maxP,
     maxPresence: maxP,
+    stamina: maxSt,
+    maxStamina: maxSt,
     items: { wasser: 3, karte: 1, anker: 2 },
   };
 }
@@ -122,8 +127,10 @@ export function grantXp(player: PlayerState, xp: number): { leveledUp: boolean; 
   if (player.level > before) {
     player.maxStability = maxStability(player.level);
     player.maxPresence = maxPresence(player.level);
+    player.maxStamina = maxStamina(player.level);
     player.stability = player.maxStability;
     player.presence = player.maxPresence;
+    player.stamina = player.maxStamina;
     return { leveledUp: true, newLevel: player.level };
   }
   return { leveledUp: false, newLevel: player.level };
@@ -155,6 +162,8 @@ export function loadSave(): SaveGame | null {
     s.lootTaken ??= [];
     s.structures ??= [];
     s.chestsOpened ??= [];
+    s.player.maxStamina ??= maxStamina(s.player.level);
+    s.player.stamina ??= s.player.maxStamina;
     return s;
   } catch {
     return null;

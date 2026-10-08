@@ -6,6 +6,8 @@ export interface HudState {
   maxStability: number;
   presence: number;
   maxPresence: number;
+  stamina: number;
+  maxStamina: number;
   level: number;
   wood: number;
   crystals: number;
@@ -38,6 +40,8 @@ export const initialHud: HudState = {
   maxStability: 1,
   presence: 1,
   maxPresence: 1,
+  stamina: 1,
+  maxStamina: 1,
   level: 1,
   wood: 0,
   crystals: 0,

@@ -1,17 +1,25 @@
 // PHÄNOMENAUTIK 3 — Spielerfigur: geriggter KayKit-Charakter („Rogue Hooded“)
 // mit AnimationStateMachine (Idle/Gehen/Rennen/Sprung/Angriff/Ausweichen/Treffer),
 // Axt am Hand-Slot. Darunter: derselbe bewährte Kapsel-Controller.
+// M3: Klettern an Mooswänden (Zelda-Regel) mit Ausdauer-Kopplung.
 
 import * as THREE from "three";
 import { clamp, lerp } from "../game/noise";
 import type { ParticleSystem } from "./particles";
 import { cloneSkinned, getModel, normalizeHeight, setShadows } from "./assets";
+import { wallCoords, wallFrame, type ClimbWallDef } from "../game/climb";
 
 export interface MoveInput {
   x: number;
   z: number;
   sprint: boolean;
   jump: boolean;
+}
+
+/** Kletter-Kontext aus der Welt: Wandliste + Ausdauer-Abfluss (false = leer) */
+export interface ClimbCtx {
+  walls: ClimbWallDef[];
+  drain: (perSecond: number, dt: number) => boolean;
 }
 
 const WALK = 6.4;
@@ -21,8 +29,9 @@ const GRAVITY = 24;
 const JUMP_VEL = 9.2;
 const COYOTE = 0.14;
 const BUFFER = 0.14;
+const CLIMB_SPEED = 2.1;
 
-type LocoState = "idle" | "walk" | "run" | "air";
+type LocoState = "idle" | "walk" | "run" | "air" | "climb";
 
 export class Player {
   group = new THREE.Group();
@@ -37,6 +46,7 @@ export class Player {
   dodgeT = 0;
   hitT = 0;
   speed2D = 0;
+  climbing: { def: ClimbWallDef; u: number; v: number } | null = null;
 
   private rig: THREE.Object3D;
   private mixer: THREE.AnimationMixer;
@@ -116,6 +126,115 @@ export class Player {
     this.facing = facing;
     this.camYaw = facing + Math.PI;
     this.grounded = true;
+    this.climbing = null;
+  }
+
+  /** Loslassen von der Wand (kleiner Abstoß optional) */
+  releaseClimb(push = 0) {
+    if (!this.climbing) return;
+    const { nx, nz } = wallFrame(this.climbing.def);
+    this.climbing = null;
+    if (push > 0) {
+      this.vel.set(nx * push * 8, 1.5, nz * push * 8);
+    }
+  }
+
+  /** Greifversuch: Spieler drückt zur Wand oder ist in der Luft davor */
+  private tryGrab(ctx: ClimbCtx, wx: number, wz: number) {
+    for (const def of ctx.walls) {
+      const { nx, nz } = wallFrame(def);
+      const c = wallCoords(def, this.pos.x, this.pos.y, this.pos.z);
+      if (c.dist < -0.2 || c.dist > 1.15) continue;
+      if (c.v < -0.3 || c.v > def.height - 0.4) continue;
+      if (Math.abs(c.lateral) > def.width / 2 + 0.6) continue;
+      // Greifen nur, wenn zur Wand gedrückt wird — oder mitten im Sprung davor
+      const toward = -(wx * nx + wz * nz);
+      if (this.grounded && toward < 0.25) continue;
+      this.climbing = {
+        def,
+        u: clamp(c.lateral, -def.width / 2, def.width / 2),
+        v: clamp(c.v, 0, def.height),
+      };
+      this.vel.set(0, 0, 0);
+      this.grounded = false;
+      this.loco = "idle";
+      this.play(this.actions.has("Climbing_A") ? "Climbing_A" : "Jump_Idle", 0.1);
+      return;
+    }
+  }
+
+  /** Kletter-Bewegung: W/S hoch/runter, A/D seitlich, Leertaste Absprung */
+  private updateClimb(
+    dt: number,
+    input: MoveInput,
+    ctx: ClimbCtx | undefined,
+    groundAt: (x: number, z: number) => number,
+    particles: ParticleSystem,
+  ) {
+    const c = this.climbing!;
+    const def = c.def;
+    const { nx, nz, rx, rz } = wallFrame(def);
+    const moving = Math.abs(input.x) + Math.abs(input.z) > 0.1;
+
+    // Ausdauer: Halten kostet wenig, Bewegen mehr — leer = loslassen
+    if (ctx && !ctx.drain(moving ? 4.5 : 1.2, dt)) {
+      this.releaseClimb(0.4);
+      return;
+    }
+
+    // Absprung von der Wand
+    if (input.jump) {
+      this.releaseClimb();
+      this.vel.set(nx * 5.5, 4.4, nz * 5.5);
+      this.airJumps = 1; // kein Doppelsprung direkt nach Absprung
+      particles.burst(8, {
+        x: this.pos.x, y: this.pos.y + 0.4, z: this.pos.z, spread: 0.5,
+        vy: 0.8, life: 0.45, size: 1.3, color: [0.65, 0.75, 0.45], gravity: 3, drag: 0.94,
+      });
+      return;
+    }
+
+    c.v += input.z * CLIMB_SPEED * dt;
+    c.u += input.x * CLIMB_SPEED * dt;
+    c.u = clamp(c.u, -def.width / 2, def.width / 2);
+
+    // Über die Kante klettern (Manteln): oben auf dem Plateau abstellen
+    if (c.v >= def.height) {
+      const lx = def.x - nx * 1.7 + rx * c.u;
+      const lz = def.z - nz * 1.7 + rz * c.u;
+      const g = groundAt(lx, lz);
+      if (g > def.baseY + def.height * 0.5) {
+        this.pos.set(lx, g, lz);
+        this.releaseClimb();
+        this.grounded = true;
+        particles.burst(7, {
+          x: lx, y: g + 0.15, z: lz, spread: 0.5,
+          vy: 1.1, life: 0.5, size: 1.4, color: [0.75, 0.72, 0.62], gravity: 4, drag: 0.93,
+        });
+        return;
+      }
+      c.v = def.height; // Kante noch nicht erreichbar — an der Oberkante halten
+    }
+    if (c.v < 0) c.v = 0;
+
+    this.pos.set(
+      def.x + nx * 0.5 + rx * c.u,
+      def.baseY + c.v,
+      def.z + nz * 0.5 + rz * c.u,
+    );
+    this.facing = def.yaw + Math.PI; // zur Wand schauen
+    this.vel.set(0, 0, 0);
+    this.grounded = false;
+
+    // Am Fuß der Wand wieder Bodenkontakt → sanft absteigen
+    if (c.v <= 0.02) {
+      const g = groundAt(this.pos.x, this.pos.z);
+      if (g >= this.pos.y - 0.35) {
+        this.pos.y = g;
+        this.releaseClimb();
+        this.grounded = true;
+      }
+    }
   }
 
   update(
@@ -124,6 +243,7 @@ export class Player {
     groundAt: (x: number, z: number) => number,
     colliders: { x: number; z: number; r: number }[],
     particles: ParticleSystem,
+    climb?: ClimbCtx,
   ) {
     const sin = Math.sin(this.camYaw);
     const cos = Math.cos(this.camYaw);
@@ -134,6 +254,18 @@ export class Player {
       wx /= wl;
       wz /= wl;
     }
+
+    // Klettern: eigenes Bewegungsmodell, umgeht Schwerkraft & Schritt-Logik
+    if (this.climbing) {
+      this.updateClimb(dt, input, climb, groundAt, particles);
+      this.speed2D = 0;
+      this.group.position.copy(this.pos);
+      this.group.rotation.y = this.facing;
+      this.animate(dt);
+      return;
+    }
+    if (climb) this.tryGrab(climb, wx, wz);
+
     const maxSp = input.sprint ? SPRINT : WALK;
 
     const tx = wx * maxSp;
@@ -244,7 +376,8 @@ export class Player {
     }
 
     let want: LocoState;
-    if (!this.grounded) want = "air";
+    if (this.climbing) want = "climb";
+    else if (!this.grounded) want = "air";
     else if (this.speed2D > 7.2) want = "run";
     else if (this.speed2D > 0.7) want = "walk";
     else want = "idle";
@@ -264,6 +397,9 @@ export class Player {
             break;
           case "air":
             this.play("Jump_Idle", 0.1);
+            break;
+          case "climb":
+            this.play(this.actions.has("Climbing_A") ? "Climbing_A" : "Jump_Idle", 0.14);
             break;
         }
       } else if (want === "walk" || want === "run") {

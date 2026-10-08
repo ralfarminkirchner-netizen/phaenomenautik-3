@@ -637,6 +637,10 @@ export function maxStability(level: number): number {
 export function maxPresence(level: number): number {
   return 24 + (level - 1) * 6;
 }
+// Ausdauer (M3: Sprint & Klettern) — regeneriert sich, Essen verbessert sie
+export function maxStamina(level: number): number {
+  return 20 + (level - 1) * 3;
+}
 
 export const INTRO_TEXT = [
   "Es gibt ein Meer, das auf keiner Seekarte steht.",

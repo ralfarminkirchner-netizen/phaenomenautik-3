@@ -21,6 +21,8 @@ import { Structures, buildFloss, buildLeiter, buildBruecke, clampSpan } from "./
 import { BUILDABLES, missingMaterials, matName, matCostText, type BuildableDef } from "../game/materials";
 import { LoreStones } from "./lorestones";
 import { Creature } from "./creature";
+import { CliffWalls } from "./cliffwalls";
+import { CLIMB_WALLS, cliffTopAt } from "../game/climb";
 import { shrinePoint } from "../game/worldLayout";
 import { PHENOMENA } from "../game/data";
 import { audio } from "../game/audio";
@@ -60,6 +62,8 @@ export class GameWorld {
   private sailDist = 17;
 
   private storm = 0;
+  private staminaDelay = 0; // Sperrzeit nach Ausdauer-Abfluss, bevor regeneriert wird
+  readonly climbWalls = CLIMB_WALLS; // QA-Hook (Playwright)
   private hudTimer = 0;
   private saveTimer = 0;
   private fpsEma = 60;
@@ -125,6 +129,7 @@ export class GameWorld {
     this.sky = new Sky(this.scene);
     this.water = new Water(this.scene);
     this.water.setReflSize(container.clientWidth, container.clientHeight, this.renderer.getPixelRatio());
+    new CliffWalls(this.scene); // Kletterwände (Moosfelsen) in die Szene hängen
     new Terrain(this.scene);
     this.props = new Props(this.scene);
     this.ship = new Ship(this.scene);
@@ -244,7 +249,10 @@ export class GameWorld {
   groundAt(x: number, z: number): number {
     const base = this.props.groundHeight(x, z);
     const st = this.structures.heightAt(x, z);
-    return st !== null && st > base ? st : base;
+    const ct = cliffTopAt(x, z); // Felsturm-Plateaus (Kletterwände)
+    let g = ct !== null && ct > base ? ct : base;
+    if (st !== null && st > g) g = st;
+    return g;
   }
 
   get uiLock(): boolean {
@@ -1093,7 +1101,29 @@ export class GameWorld {
       const paddling = !!(raft && input.z > 0 && !locked);
       if (paddling) input = { x: 0, z: 0, sprint: false, jump: false };
 
-      this.player.update(dt, input, (x, z) => this.groundAt(x, z), this.props.colliders, this.particles);
+      // Ausdauer-Gate: Sprint nur, wenn Ausdauer vorhanden (Klettern entleert via drain)
+      const pl = this.save.player;
+      if (input.sprint && pl.stamina <= 0.5) input.sprint = false;
+
+      this.player.update(dt, input, (x, z) => this.groundAt(x, z), this.props.colliders, this.particles, {
+        walls: CLIMB_WALLS,
+        drain: (perSecond, ddt) => {
+          this.staminaDelay = 0.9;
+          pl.stamina = Math.max(0, pl.stamina - perSecond * ddt);
+          return pl.stamina > 0;
+        },
+      });
+
+      // Ausdauer-Buchhaltung: Sprint kostet, Stillstand/Gehen regeneriert
+      if (this.player.climbing) {
+        // drain läuft bereits über den Kletter-Kontext
+      } else if (input.sprint && this.player.speed2D > 3 && !paddling) {
+        this.staminaDelay = 0.9;
+        pl.stamina = Math.max(0, pl.stamina - 4.5 * dt);
+      } else {
+        this.staminaDelay = Math.max(0, this.staminaDelay - dt);
+        if (this.staminaDelay <= 0) pl.stamina = Math.min(pl.maxStamina, pl.stamina + 6.5 * dt);
+      }
 
       // Bau-Geist folgt dem Spieler
       if (this.buildSession) this.updateBuildGhost();
@@ -1236,6 +1266,8 @@ export class GameWorld {
         maxStability: this.save.player.maxStability,
         presence: this.save.player.presence,
         maxPresence: this.save.player.maxPresence,
+        stamina: this.save.player.stamina,
+        maxStamina: this.save.player.maxStamina,
         level: this.save.player.level,
         wood: this.save.wood,
         crystals: this.save.crystals,
