@@ -6,6 +6,8 @@ import * as THREE from "three";
 import { ALL_LAND, terrainHeight, terrainSlope } from "../game/worldLayout";
 import { mulberry32 } from "../game/noise";
 import { matById } from "../game/materials";
+import { CLIMB_WALLS, wallFrame } from "../game/climb";
+import { ingById } from "../game/cooking";
 
 export interface LootRec {
   key: string; // eindeutige Id (persistiert)
@@ -15,7 +17,9 @@ export interface LootRec {
   z: number;
   mesh: THREE.Mesh;
   taken: boolean;
-  respawnAt: number; // 0 = einmalig
+  respawnEvery: number; // Sekunden, 0 = einmalig
+  respawnAt: number; // Zeitpunkt des Respawns (Spielzeit)
+  food?: string; // Zutaten-Id (M3) — wenn gesetzt, landet der Fund im Essens-Vorrat
 }
 
 const LOOT_STYLE: Record<string, { color: number; emissive?: number; shape: "box" | "roll" | "ball" | "disc" | "can" }> = {
@@ -55,6 +59,35 @@ const LOOT_STYLE: Record<string, { color: number; emissive?: number; shape: "box
   laterne: { color: 0xd8a85a, emissive: 0x6a4a1a, shape: "can" },
   zeltbahn: { color: 0xa89878, shape: "disc" },
   ankerstein: { color: 0x6d6a66, shape: "ball" },
+  // ── Zutaten (M3 Küche) ──
+  heidelbeere: { color: 0x3a4a8a, emissive: 0x10183a, shape: "ball" },
+  champignon: { color: 0xd8cfc0, shape: "can" },
+  steinpilz: { color: 0x9a6b40, shape: "can" },
+  nori: { color: 0x1e3a2a, emissive: 0x0a1a12, shape: "disc" },
+  miesmuschel: { color: 0x2a3a4a, emissive: 0x0a1420, shape: "ball" },
+  walnuss: { color: 0x7a5a38, shape: "ball" },
+  mandel: { color: 0xa87a4a, shape: "ball" },
+  haselnuss: { color: 0x8a6238, shape: "ball" },
+  honig: { color: 0xd8a020, emissive: 0x5a3a08, shape: "can" },
+  moewenei: { color: 0xe8e8dc, shape: "ball" },
+  kartoffel: { color: 0xb09a6a, shape: "ball" },
+  linse: { color: 0x8a6a42, shape: "disc" },
+  reis: { color: 0xe8e4d8, shape: "disc" },
+  hafer: { color: 0xc9b486, shape: "disc" },
+  buchweizen: { color: 0x9a7a52, shape: "disc" },
+  quinoa: { color: 0xd8c9a0, shape: "disc" },
+  vollkornbrot: { color: 0x7a5230, shape: "box" },
+  weizenmehl: { color: 0xe8e0cc, shape: "disc" },
+  kaese: { color: 0xe0c040, shape: "box" },
+  milch: { color: 0xf0f0e8, shape: "can" },
+  apfel: { color: 0xc94a3a, emissive: 0x401008, shape: "ball" },
+  kuerbiskerne: { color: 0x6a8a4a, shape: "disc" },
+  leinsamen: { color: 0x8a6a3a, shape: "disc" },
+  brennnessel: { color: 0x3a6a2a, emissive: 0x0c2006, shape: "disc" },
+  olivenoel: { color: 0x7a9a3a, emissive: 0x2a3a0a, shape: "can" },
+  hering: { color: 0x8aa2b8, emissive: 0x1a2a3a, shape: "roll" },
+  lachs: { color: 0xd88a6a, emissive: 0x3a1a10, shape: "roll" },
+  makrele: { color: 0x6a8aa8, emissive: 0x102030, shape: "roll" },
 };
 
 function makeLootMesh(matId: string): THREE.Mesh {
@@ -102,6 +135,19 @@ const MAT_ZONE: Record<string, Zone> = {
   regenschirm: "harbor", laterne: "harbor", zeltbahn: "harbor", ankerstein: "inland",
 };
 
+/** Zutaten (M3): wo wächst/liegt was. Fisch: Frischfang, den Möwen fallen lassen (selten). */
+const FOOD_ZONE: Record<string, Zone> = {
+  heidelbeere: "forest", champignon: "forest", steinpilz: "forest", nori: "beach",
+  miesmuschel: "beach", walnuss: "forest", mandel: "forest", haselnuss: "forest",
+  honig: "forest", kartoffel: "inland", linse: "inland", reis: "harbor",
+  hafer: "inland", buchweizen: "inland", quinoa: "inland", vollkornbrot: "harbor",
+  weizenmehl: "harbor", kaese: "harbor", milch: "harbor", apfel: "forest",
+  kuerbiskerne: "inland", leinsamen: "inland", brennnessel: "forest", olivenoel: "harbor",
+  hering: "beach", lachs: "beach", makrele: "beach",
+};
+/** Seltene Zutaten (kommen halb so oft in den Pool) */
+const FOOD_RARE = new Set(["honig", "hering", "lachs", "makrele", "steinpilz"]);
+
 export class Loot {
   items: LootRec[] = [];
   group = new THREE.Group();
@@ -115,11 +161,15 @@ export class Loot {
       const count = isHarbor ? 26 : 10 + Math.floor(rng() * 4);
       const placed: { x: number; z: number }[] = [];
       for (let i = 0; i < count; i++) {
-        const matIds = Object.keys(MAT_ZONE).filter((id) =>
-          isHarbor ? true : MAT_ZONE[id] !== "harbor",
-        );
-        const matId = matIds[Math.floor(rng() * matIds.length)];
-        const zone: Zone = isHarbor && rng() < 0.45 ? "harbor" : MAT_ZONE[matId];
+        const useFood = rng() < 0.4;
+        const pool = (
+          useFood
+            ? Object.keys(FOOD_ZONE).filter((id) => (isHarbor ? true : FOOD_ZONE[id] !== "harbor"))
+            : Object.keys(MAT_ZONE).filter((id) => (isHarbor ? true : MAT_ZONE[id] !== "harbor"))
+        ).flatMap((id) => (useFood && FOOD_RARE.has(id) ? [id] : [id, id]));
+        const matId = pool[Math.floor(rng() * pool.length)];
+        const zoneMap = useFood ? FOOD_ZONE : MAT_ZONE;
+        const zone: Zone = isHarbor && rng() < 0.45 ? "harbor" : zoneMap[matId];
         let x = isl.x;
         let z = isl.z;
         let okSpot = false;
@@ -160,7 +210,40 @@ export class Loot {
           z,
           mesh,
           taken,
-          respawnAt: matId === "stamm" || matId === "muschel" || matId === "algen" ? 240 : 0,
+          respawnEvery: useFood ? 300 : matId === "stamm" || matId === "muschel" || matId === "algen" ? 240 : 0,
+          respawnAt: 0,
+          food: useFood ? matId : undefined,
+        });
+      }
+    }
+
+    // Möweneier auf den Felsturm-Plateaus (Kletter-Belohnung, M3)
+    for (const w of CLIMB_WALLS) {
+      const rng = mulberry32(Math.floor(w.baseY * 1000 + w.x));
+      const { rx, rz } = wallFrame(w);
+      const eggCount = 1 + Math.floor(rng() * 2);
+      for (let i = 0; i < eggCount; i++) {
+        const off = (rng() - 0.5) * (w.width - 2.5);
+        const x = w.x - Math.sin(w.yaw) * 2.2 + rx * off;
+        const z = w.z - Math.cos(w.yaw) * 2.2 + rz * off;
+        const key = `loot_egg_${w.id}_${i}`;
+        const y = w.baseY + w.height;
+        const mesh = makeLootMesh("moewenei");
+        mesh.position.set(x, y + 0.25, z);
+        const taken = takenKeys.includes(key);
+        mesh.visible = !taken;
+        this.group.add(mesh);
+        this.items.push({
+          key,
+          matId: "moewenei",
+          x,
+          y,
+          z,
+          mesh,
+          taken,
+          respawnEvery: 300,
+          respawnAt: 0,
+          food: "moewenei",
         });
       }
     }
@@ -180,21 +263,22 @@ export class Loot {
     return best;
   }
 
-  take(it: LootRec, now: number): string | null {
+  take(it: LootRec, now: number): { name: string; food?: string } | null {
     if (it.taken) return null;
     it.taken = true;
     it.mesh.visible = false;
-    if (it.respawnAt > 0) it.respawnAt += now;
-    return matById(it.matId)?.name ?? it.matId;
+    if (it.respawnEvery > 0) it.respawnAt = now + it.respawnEvery;
+    const name = it.food ? ingById(it.food)?.name ?? it.matId : matById(it.matId)?.name ?? it.matId;
+    return { name, food: it.food };
   }
 
   update(t: number, now: number, camPos: THREE.Vector3) {
     for (const it of this.items) {
       if (it.taken) {
-        if (it.respawnAt > 0 && now > it.respawnAt) {
+        if (it.respawnEvery > 0 && now > it.respawnAt) {
           it.taken = false;
           it.mesh.visible = true;
-          it.respawnAt = it.respawnAt > 0 ? 240 : 0;
+          it.respawnAt = 0;
         }
         continue;
       }

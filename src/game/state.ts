@@ -2,7 +2,7 @@
 
 import { PHENOMENA, levelForXp, maxPresence, maxStability, maxStamina } from "./data";
 import { HARBOR, ISLANDS } from "./worldLayout";
-import type { ActiveMeal } from "./cooking";
+import type { ActiveMeal, MicroKey } from "./cooking";
 
 export interface IslandState {
   id: string;
@@ -69,6 +69,7 @@ export interface SaveGame {
   activeMeals: ActiveMeal[]; // laufende Essens-Wirkungen
   recipesFound: string[]; // gelernte Rezept-Ids
   mealsCooked: number; // Statistik für Experiment-Freischaltung
+  recentMicros: { micros: Partial<Record<MicroKey, number>>; at: number }[]; // Mikros der letzten Mahlzeiten (Körperkarte)
 }
 
 const SAVE_KEY = "phaenomenautik3-save-v1";
@@ -109,6 +110,7 @@ export function newGame(): SaveGame {
     activeMeals: [],
     recipesFound: [],
     mealsCooked: 0,
+    recentMicros: [],
   };
 }
 
@@ -178,6 +180,7 @@ export function loadSave(): SaveGame | null {
     s.activeMeals ??= [];
     s.recipesFound ??= [];
     s.mealsCooked ??= 0;
+    s.recentMicros ??= [];
     return s;
   } catch {
     return null;

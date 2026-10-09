@@ -9,9 +9,14 @@ import { activeQuests, QUESTS } from "../game/quests";
 import { store } from "../game/store";
 import { getWorld } from "../game/runtime";
 import { MATERIALS, matName } from "../game/materials";
+import { RECIPES, INGREDIENTS } from "../game/cooking";
+import { BodyMap } from "./BodyMap";
+
+type JournalTab = "atlas" | "koerper" | "rezepte";
 
 export function JournalOverlay() {
   const [open, setOpen] = useState(store.get().journalOpen);
+  const [tab, setTab] = useState<JournalTab>("atlas");
   useEffect(() => store.subscribe(() => setOpen(store.get().journalOpen)), []);
   if (!open) return null;
   const world = getWorld()!;
@@ -22,6 +27,14 @@ export function JournalOverlay() {
   const foundLore = LORE.filter((l) => save.echoesFound.includes(l.id));
   const metNpcs = NPCS.filter((n) => save.npcMemory[n.id]?.met);
   const remaining = PHENOMENA.filter((p) => !p.final && !save.islands.find((i) => i.id === p.id)?.overcome).length;
+  const foundRecipes = RECIPES.filter((r) => save.recipesFound.includes(r.id));
+  const foodStock = Object.entries(save.food).filter(([, n]) => n > 0);
+
+  const TABS: { id: JournalTab; label: string }[] = [
+    { id: "atlas", label: "🗺 Atlas" },
+    { id: "koerper", label: "🧍 Körper" },
+    { id: "rezepte", label: "🍲 Rezepte" },
+  ];
 
   return (
     <div className="absolute inset-0 z-30 bg-black/70 backdrop-blur-sm flex items-center justify-center pointer-events-auto p-6">
@@ -32,7 +45,69 @@ export function JournalOverlay() {
             ✕
           </button>
         </div>
-        <div className="overflow-y-auto px-5 py-4 space-y-6 text-sm">
+        {/* Tabs */}
+        <div className="flex gap-1 px-5 pt-3 bg-black/20">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`rounded-t-lg px-4 py-2 text-sm font-medium transition ${
+                tab === t.id ? "bg-[#16233a] text-amber-100 border border-white/10 border-b-transparent" : "text-white/45 hover:text-white/75"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="overflow-y-auto px-5 py-4 space-y-6 text-sm bg-[#16233a]">
+          {tab === "koerper" && (
+            <section>
+              <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-3">Körperkarte — was wirkt gerade?</h3>
+              <BodyMap />
+            </section>
+          )}
+          {tab === "rezepte" && (
+            <>
+              <section>
+                <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-2">Gelernte Rezepte ({foundRecipes.length}/{RECIPES.length})</h3>
+                {foundRecipes.length === 0 ? (
+                  <p className="text-white/50 italic">Noch keine. Koch am Feuer (K) und probiere Kombinationen — was wirkt, wird notiert.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {foundRecipes.map((r) => (
+                      <li key={r.id} className="rounded-lg bg-black/30 border border-white/10 px-3 py-2">
+                        <div className="font-semibold text-amber-100">{r.name}</div>
+                        <div className="text-white/60 text-xs">
+                          {r.ingredients.map((id) => INGREDIENTS.find((i) => i.id === id)?.name ?? id).join(" · ")}
+                        </div>
+                        <div className="text-white/75 text-xs mt-1 italic">{r.text}</div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+              <section>
+                <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-2">Vorrat ({foodStock.length})</h3>
+                {foodStock.length === 0 ? (
+                  <p className="text-white/50 italic">Leer. Beeren, Pilze, Algen, Fische und Kräuter warten in der Welt.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                    {foodStock.map(([id, n]) => {
+                      const ing = INGREDIENTS.find((i) => i.id === id);
+                      return (
+                        <div key={id} className="rounded-lg bg-black/30 border border-white/10 px-2.5 py-1.5" title={ing ? `${ing.kcal} kcal/100 g · ${ing.source}` : ""}>
+                          <div className="text-[13px] text-white/85">{ing?.name ?? id}</div>
+                          <div className="text-[11px] text-sky-300/70">× {n} · {ing?.gluten === "frei" ? "🌾✓" : ing?.gluten === "haltig" ? "🌾✗" : "🌾?"}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+          {tab === "atlas" && (
+          <>
           {/* Fortschritt */}
           <section>
             <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-2">Die Reise</h3>
@@ -143,6 +218,8 @@ export function JournalOverlay() {
               </ul>
             )}
           </section>
+          </>
+          )}
         </div>
         <div className="px-5 py-3 border-t border-white/10 bg-black/30 text-[10px] leading-relaxed text-white/45">{DISCLAIMER}</div>
       </div>

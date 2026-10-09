@@ -23,7 +23,7 @@ import { LoreStones } from "./lorestones";
 import { Creature } from "./creature";
 import { CliffWalls } from "./cliffwalls";
 import { CLIMB_WALLS, cliffTopAt } from "../game/climb";
-import { computeDish, mealsToActive, mealBonus, pruneMeals, type DishResult } from "../game/cooking";
+import { computeDish, mealsToActive, mealBonus, pruneMeals, ingById, type DishResult } from "../game/cooking";
 import { shrinePoint } from "../game/worldLayout";
 import { PHENOMENA } from "../game/data";
 import { audio } from "../game/audio";
@@ -398,7 +398,7 @@ export class GameWorld {
     // Material aufheben
     const it = this.loot.nearest(p.x, p.z, 2.6);
     if (it) {
-      const name = it.mesh ? matName(it.matId) : it.matId;
+      const name = it.food ? ingById(it.food)?.name ?? it.matId : matName(it.matId);
       this.currentPrompt = {
         key: "E",
         text: `${name} aufheben`,
@@ -614,6 +614,7 @@ export class GameWorld {
     const now = Date.now();
     this.save.activeMeals = pruneMeals(this.save.activeMeals, now).concat(mealsToActive(dish, now));
     this.save.mealsCooked++;
+    this.save.recentMicros = [...this.save.recentMicros, { micros: dish.micros, at: now }].slice(-6);
     // Rezept lernen
     if (dish.matchedRecipeId && !this.save.recipesFound.includes(dish.matchedRecipeId)) {
       this.save.recipesFound.push(dish.matchedRecipeId);
@@ -1040,12 +1041,13 @@ export class GameWorld {
   }
 
   private takeLoot(it: Parameters<Loot["take"]>[0]) {
-    const name = this.loot.take(it, this.elapsed);
-    if (name) {
-      this.save.materials[it.matId] = (this.save.materials[it.matId] ?? 0) + 1;
+    const res = this.loot.take(it, this.elapsed);
+    if (res) {
+      if (res.food) this.save.food[res.food] = (this.save.food[res.food] ?? 0) + 1;
+      else this.save.materials[it.matId] = (this.save.materials[it.matId] ?? 0) + 1;
       if (!this.save.lootTaken.includes(it.key)) this.save.lootTaken.push(it.key);
       audio.confirm();
-      store.toast(`+1 ${name}`, "good");
+      store.toast(`+1 ${res.name}`, "good");
       this.persist();
     }
   }
