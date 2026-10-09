@@ -2,6 +2,7 @@
 
 import { PHENOMENA, levelForXp, maxPresence, maxStability, maxStamina } from "./data";
 import { HARBOR, ISLANDS } from "./worldLayout";
+import { emptyGraphProgress, graphProgressFromIslands, type GraphProgress } from "./phenomenaGraph";
 import type { ActiveMeal, MicroKey } from "./cooking";
 
 export interface IslandState {
@@ -76,6 +77,8 @@ export interface SaveGame {
   // Rededuelle (M3)
   duelsDone: string[]; // abgeschlossene Duell-Ids
   compassEntries: string[]; // erkannte Manipulations-Taktiken (Manipulations-Kompass)
+  // Phänomen-Netz (M4)
+  graph: GraphProgress; // Nebel-of-War: verstandene / begegnete Knoten, befahrene Kanten
 }
 
 const SAVE_KEY = "phaenomenautik3-save-v1";
@@ -137,6 +140,7 @@ export function newGame(): SaveGame {
     equipment: [],
     duelsDone: [],
     compassEntries: [],
+    graph: emptyGraphProgress(),
   };
 }
 
@@ -211,6 +215,7 @@ export function loadSave(): SaveGame | null {
     s.equipment ??= [];
     s.duelsDone ??= [];
     s.compassEntries ??= [];
+    s.graph ??= graphProgressFromIslands(s.islands); // M4: alter Insel-Fortschritt wird ins Netz übernommen
     return s;
   } catch {
     return null;
