@@ -9,6 +9,7 @@ import { JournalOverlay, LoreOverlay } from "./ui/JournalOverlay";
 import { ChatOverlay } from "./ui/ChatOverlay";
 import { CookOverlay } from "./ui/CookOverlay";
 import { DuelOverlay } from "./ui/DuelOverlay";
+import { EncounterOverlay } from "./ui/EncounterOverlay";
 import { loadSave, newGame, type SaveGame } from "./game/state";
 import { startWorld } from "./game/runtime";
 import { store } from "./game/store";
@@ -69,6 +70,7 @@ export default function App() {
           <ChatOverlay />
           <CookOverlay />
           <DuelOverlay />
+          <EncounterOverlay />
         </>
       )}
       {phase === "title" && (

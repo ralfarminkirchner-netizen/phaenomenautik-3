@@ -21,11 +21,13 @@ import { Structures, buildFloss, buildLeiter, buildBruecke, buildVentilator, bui
 import { BUILDABLES, missingMaterials, matName, matCostText, type BuildableDef } from "../game/materials";
 import { LoreStones } from "./lorestones";
 import { Creature } from "./creature";
+import { Wisps } from "./wisps";
 import { CliffWalls } from "./cliffwalls";
 import { CLIMB_WALLS, cliffTopAt } from "../game/climb";
 import { computeDish, mealsToActive, mealBonus, pruneMeals, ingById, type DishResult } from "../game/cooking";
 import { shrinePoint } from "../game/worldLayout";
 import { PHENOMENA } from "../game/data";
+import { NODE_BY_ID, revealedByUnderstanding, fogStateOf } from "../game/phenomenaGraph";
 import { audio } from "../game/audio";
 import { store } from "../game/store";
 import { preloadAll, extractMerged, getModel, setShadows } from "./assets";
@@ -81,6 +83,7 @@ export class GameWorld {
   private npcs!: Npcs;
   private loreStones!: LoreStones;
   private creatures = new Map<string, Creature>();
+  private wisps!: Wisps; // Strandläufer (M4)
   private echoOrb: THREE.Mesh | null = null;
   private loot!: Loot;
   private structures!: Structures;
@@ -159,6 +162,9 @@ export class GameWorld {
 
     // Lore-Runensteine
     this.loreStones = new LoreStones(this.scene, save.echoesFound);
+
+    // Strandläufer (M4): sechs Strand-Begegnungen auf Alarm-Atoll & Glaswelt
+    this.wisps = new Wisps(this.scene, save.graph);
 
     // Sammelbare Materialien + gebaute Strukturen
     this.loot = new Loot(this.scene, save.lootTaken);
@@ -259,7 +265,7 @@ export class GameWorld {
 
   get uiLock(): boolean {
     const st = store.get();
-    return !!(st.menuOpen || st.dead || st.dialogNpc || st.battlePhen || st.journalOpen || st.loreStone || st.chatOpen || st.cookOpen || st.duelId);
+    return !!(st.menuOpen || st.dead || st.dialogNpc || st.battlePhen || st.encounterId || st.journalOpen || st.loreStone || st.chatOpen || st.cookOpen || st.duelId);
   }
 
   // ── Eingaben ─────────────────────────────────────────────────────
@@ -293,8 +299,8 @@ export class GameWorld {
         store.set({ chatOpen: false });
       } else if (st.cookOpen) {
         store.set({ cookOpen: false });
-      } else if (st.journalOpen || st.dialogNpc || st.loreStone) {
-        store.set({ journalOpen: false, dialogNpc: null, loreStone: null });
+      } else if (st.journalOpen || st.dialogNpc || st.loreStone || st.encounterId) {
+        store.set({ journalOpen: false, dialogNpc: null, loreStone: null, encounterId: null });
       } else if (!st.battlePhen && !st.duelId) {
         store.set({ menuOpen: !st.menuOpen });
       }
@@ -459,6 +465,17 @@ export class GameWorld {
         key: "E",
         text: "Runenstein berühren",
         action: () => this.readStone(stone.line.id),
+      };
+      return;
+    }
+
+    // Strand-Begegnung (M4): kleine Phänomen-Gestalten am Strand
+    const wisp = this.wisps.nearest(p.x, p.z, 3.4);
+    if (wisp) {
+      this.currentPrompt = {
+        key: "E",
+        text: `Strand-Begegnung: ${wisp.node.name} — ${wisp.node.epithet}`,
+        action: () => this.openEncounter(wisp.node.id),
       };
       return;
     }
@@ -884,6 +901,41 @@ export class GameWorld {
     this.persist();
   }
 
+  // ── Strand-Begegnungen (M4) ──────────────────────────────────────
+  /** Begegnung öffnen: als „begegnet“ vermerken, Overlay zeigen */
+  openEncounter(nodeId: string) {
+    if (!NODE_BY_ID.has(nodeId)) return;
+    if (!this.save.graph.met.includes(nodeId)) this.save.graph.met.push(nodeId);
+    if (document.pointerLockElement) document.exitPointerLock();
+    audio.select();
+    store.set({ encounterId: nodeId });
+    this.persist();
+  }
+
+  /** Begegnung abschließen: begriffen — Register, Einsicht, Nebel-Reveal */
+  completeStrandEncounter(nodeId: string) {
+    const node = NODE_BY_ID.get(nodeId);
+    if (!node) {
+      store.set({ encounterId: null });
+      return;
+    }
+    if (!this.save.graph.understood.includes(nodeId)) {
+      // Reveal vor dem Eintragen berechnen (Vorher-Nebelstand)
+      const revealed = revealedByUnderstanding(nodeId, this.save.graph);
+      this.save.graph.understood.push(nodeId);
+      grantXp(this.save.player, 8);
+      const names = revealed.map((id) => NODE_BY_ID.get(id)?.name ?? id).slice(0, 3);
+      store.toast(node.text.insight, "good");
+      if (names.length > 0) {
+        store.toast(`Aus dem Nebel taucht: ${names.join(", ")} …`, "info");
+      }
+      audio.understand();
+      this.wisps.dissolve(nodeId, this.particles);
+    }
+    store.set({ encounterId: null });
+    this.persist();
+  }
+
   openDialog(npcId: string) {
     // Rededuell (M3): Vessa startet ihr Duell statt des freien Dialogs
     if (npcId === "vessa" && !this.save.duelsDone.includes("duell_vessa")) {
@@ -1179,6 +1231,16 @@ export class GameWorld {
     return this.save;
   }
 
+  /** QA-Hook (M4): aktive Strandläufer mit Positionen */
+  get wispList(): { nodeId: string; x: number; z: number }[] {
+    return this.wisps.list();
+  }
+
+  /** QA-Hook (M4): Nebel-Zustand eines Graph-Knotens */
+  fogOf(nodeId: string): string {
+    return fogStateOf(nodeId, this.save.graph);
+  }
+
   // ── Persistenz ───────────────────────────────────────────────────
   private persist() {
     this.save.ship = { x: this.ship.x, z: this.ship.z, heading: this.ship.heading };
@@ -1419,6 +1481,7 @@ export class GameWorld {
     // NPCs & Lore-Steine
     this.npcs.update(dt, this.player.pos, this.uiLock);
     this.loreStones.update(t, this.camera.position);
+    this.wisps.update(t, focus);
 
     // Echo-Orb schwebt
     if (this.echoOrb) {

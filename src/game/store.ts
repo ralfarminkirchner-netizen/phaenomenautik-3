@@ -27,6 +27,7 @@ export interface HudState {
   dead: boolean;
   dialogNpc: string | null;
   battlePhen: string | null;
+  encounterId: string | null; // aktive Strand-Begegnung (M4)
   journalOpen: boolean;
   loreStone: string | null; // Id des offenen Lore-Steins
   chatOpen: boolean;
@@ -65,6 +66,7 @@ export const initialHud: HudState = {
   dead: false,
   dialogNpc: null,
   battlePhen: null,
+  encounterId: null,
   journalOpen: false,
   loreStone: null,
   chatOpen: false,
