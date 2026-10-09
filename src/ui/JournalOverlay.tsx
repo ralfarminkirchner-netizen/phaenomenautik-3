@@ -9,7 +9,8 @@ import { activeQuests, QUESTS } from "../game/quests";
 import { store } from "../game/store";
 import { getWorld } from "../game/runtime";
 import { MATERIALS, matName } from "../game/materials";
-import { RECIPES, INGREDIENTS } from "../game/cooking";
+import { RECIPES, INGREDIENTS, GF_DISCLAIMER } from "../game/cooking";
+import { saveGfMode } from "../game/state";
 import { BodyMap } from "./BodyMap";
 
 type JournalTab = "atlas" | "koerper" | "rezepte";
@@ -68,6 +69,33 @@ export function JournalOverlay() {
           )}
           {tab === "rezepte" && (
             <>
+              <section>
+                {/* Glutenfrei-Modus: jederzeit umschaltbar */}
+                <button
+                  className={`w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${
+                    save.glutenFree
+                      ? "border-emerald-400/40 bg-emerald-900/30"
+                      : "border-white/10 bg-black/25 hover:border-white/25"
+                  }`}
+                  onClick={() => {
+                    save.glutenFree = !save.glutenFree;
+                    saveGfMode(save.glutenFree);
+                    store.set({ glutenFree: save.glutenFree });
+                    world.saveNow();
+                  }}
+                >
+                  <span className={`w-3 h-3 rounded-full shrink-0 ${save.glutenFree ? "bg-emerald-400" : "bg-white/20"}`} />
+                  <span>
+                    <span className={`block text-sm font-medium ${save.glutenFree ? "text-emerald-200" : "text-white/75"}`}>
+                      🌾 Glutenfrei-Modus {save.glutenFree ? "an" : "aus"}
+                    </span>
+                    <span className="block text-[11px] text-white/45 mt-0.5">
+                      Praktisch glutenfrei kochen lernen: Tagging, Tausch-Vorschläge, sichere Vorratskammer.
+                    </span>
+                  </span>
+                </button>
+                {save.glutenFree && <p className="text-[10px] text-white/40 leading-relaxed mt-2">{GF_DISCLAIMER}</p>}
+              </section>
               <section>
                 <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-2">Gelernte Rezepte ({foundRecipes.length}/{RECIPES.length})</h3>
                 {foundRecipes.length === 0 ? (

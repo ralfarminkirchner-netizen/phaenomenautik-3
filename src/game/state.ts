@@ -70,9 +70,27 @@ export interface SaveGame {
   recipesFound: string[]; // gelernte Rezept-Ids
   mealsCooked: number; // Statistik für Experiment-Freischaltung
   recentMicros: { micros: Partial<Record<MicroKey, number>>; at: number }[]; // Mikros der letzten Mahlzeiten (Körperkarte)
+  glutenFree: boolean; // Glutenfrei-Modus (M3, Bildungs-Feature)
+  gfMealCooked?: boolean; // einmal glutenfrei gekocht (Tove-Quest)
 }
 
 const SAVE_KEY = "phaenomenautik3-save-v1";
+const GF_KEY = "phaenomenautik3-gf-mode"; // Titel-Schalter, unabhängig vom Spielstand
+
+export function loadGfMode(): boolean {
+  try {
+    return localStorage.getItem(GF_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+export function saveGfMode(on: boolean) {
+  try {
+    localStorage.setItem(GF_KEY, on ? "1" : "0");
+  } catch {
+    /* ignorieren */
+  }
+}
 
 export const SHIP_START = { x: HARBOR.x, z: HARBOR.z + 260, heading: 0 };
 
@@ -111,6 +129,7 @@ export function newGame(): SaveGame {
     recipesFound: [],
     mealsCooked: 0,
     recentMicros: [],
+    glutenFree: loadGfMode(),
   };
 }
 
@@ -181,6 +200,7 @@ export function loadSave(): SaveGame | null {
     s.recipesFound ??= [];
     s.mealsCooked ??= 0;
     s.recentMicros ??= [];
+    s.glutenFree ??= loadGfMode();
     return s;
   } catch {
     return null;

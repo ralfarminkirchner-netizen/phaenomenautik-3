@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { store } from "../game/store";
 import { getWorld } from "../game/runtime";
-import { computeDish, INGREDIENTS, type DishResult, type GlutenStatus } from "../game/cooking";
+import { computeDish, INGREDIENTS, SUBSTITUTIONS, type DishResult, type GlutenStatus } from "../game/cooking";
 import { audio } from "../game/audio";
 
 const GLUTEN_BADGE: Record<GlutenStatus, { icon: string; label: string; cls: string }> = {
@@ -56,6 +56,7 @@ function CookInner() {
 
   const save = world?.getSave();
   const food = save?.food ?? {};
+  const gfMode = save?.glutenFree ?? false;
 
   const dish = useMemo(() => (pot.length ? computeDish(pot) : null), [pot]);
 
@@ -70,6 +71,13 @@ function CookInner() {
   };
   const removeAt = (idx: number) => {
     setPot(pot.filter((_, i) => i !== idx));
+    setResult(null);
+  };
+  /** Glutenfrei tauschen: glutenhaltige Zutat im Topf durch Alternative ersetzen */
+  const substitute = (idx: number, subId: string) => {
+    const inPotElsewhere = pot.filter((p, i) => p === subId && i !== idx).length;
+    if ((food[subId] ?? 0) <= inPotElsewhere) return;
+    setPot(pot.map((p, i) => (i === idx ? subId : p)));
     setResult(null);
   };
 
@@ -88,6 +96,12 @@ function CookInner() {
 
   const available = INGREDIENTS.filter((i) => (food[i.id] ?? 0) > 0);
   const badge = dish ? GLUTEN_BADGE[dish.gluten] : null;
+  // Substitutions-Bedarf: glutenhaltige/verdächtige Zutaten im Topf
+  const subNeeds = gfMode
+    ? pot
+        .map((id, idx) => ({ id, idx, subs: SUBSTITUTIONS[id] }))
+        .filter((e) => e.subs && (INGREDIENTS.find((i) => i.id === e.id)?.gluten ?? "frei") !== "frei")
+    : [];
 
   return (
     <div className="absolute inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center pointer-events-auto z-20">
@@ -109,14 +123,20 @@ function CookInner() {
               )}
               {available.map((ing) => {
                 const left = (food[ing.id] ?? 0) - pot.filter((p) => p === ing.id).length;
+                const gBadge = gfMode ? (ing.gluten === "frei" ? "🌾✓" : ing.gluten === "haltig" ? "🌾✗" : "🌾?") : null;
                 return (
                   <button
                     key={ing.id}
                     onClick={() => add(ing.id)}
                     disabled={left <= 0 || pot.length >= 5}
-                    className="w-full flex items-center justify-between rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-35 border border-white/10 px-3 py-1.5 text-left transition"
+                    className={`w-full flex items-center justify-between rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-35 border px-3 py-1.5 text-left transition ${
+                      gfMode && ing.gluten === "haltig" ? "border-rose-400/30" : gfMode && ing.gluten === "verdaechtig" ? "border-amber-400/30" : "border-white/10"
+                    }`}
+                    title={gfMode ? (ing.gluten === "frei" ? "glutenfrei" : ing.gluten === "haltig" ? "enthält Gluten" : "Verarbeitung/Kontamination möglich") : undefined}
                   >
-                    <span className="text-sm text-white/90">{ing.name}</span>
+                    <span className="text-sm text-white/90">
+                      {ing.name} {gBadge && <span className="text-xs">{gBadge}</span>}
+                    </span>
                     <span className="text-xs text-white/50 tabular-nums">×{left}</span>
                   </button>
                 );
@@ -170,6 +190,31 @@ function CookInner() {
                     </span>
                   )}
                 </div>
+
+                {subNeeds.length > 0 && (
+                  <div className="rounded-xl border border-amber-400/30 bg-amber-900/25 px-3.5 py-2.5 space-y-1.5">
+                    <div className="text-[11px] uppercase tracking-wider text-amber-200/80">🌾 Glutenfrei tauschen?</div>
+                    {subNeeds.map(({ id, idx, subs }) => (
+                      <div key={`${id}-${idx}`} className="text-xs text-white/80">
+                        <span className="text-white/60">{INGREDIENTS.find((i) => i.id === id)?.name} →</span>{" "}
+                        {subs!.map((s) => {
+                          const have = (food[s.id] ?? 0) > pot.filter((p, i) => p === s.id && i !== idx).length;
+                          return (
+                            <button
+                              key={s.id}
+                              disabled={!have}
+                              onClick={() => substitute(idx, s.id)}
+                              title={have ? `${INGREDIENTS.find((i) => i.id === s.id)?.name} ist im Vorrat` : "nicht im Vorrat"}
+                              className="rounded-md bg-emerald-800/50 border border-emerald-400/30 text-emerald-200 px-2 py-0.5 mx-0.5 my-0.5 hover:bg-emerald-700/50 disabled:opacity-35"
+                            >
+                              {s.as}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <MacroBar label="Kohlenhydrate" value={dish.carbs} max={60} color="bg-amber-400" />

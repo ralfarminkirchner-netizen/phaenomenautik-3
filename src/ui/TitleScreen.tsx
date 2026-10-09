@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { DISCLAIMER, INTRO_TEXT } from "../game/data";
+import { loadGfMode, saveGfMode } from "../game/state";
 
 export function TitleScreen({
   hasSave,
@@ -14,6 +15,7 @@ export function TitleScreen({
 }) {
   const [showIntro, setShowIntro] = useState(false);
   const [introStep, setIntroStep] = useState(0);
+  const [gf, setGf] = useState(loadGfMode());
 
   const lines = INTRO_TEXT;
   const advance = () => {
@@ -63,6 +65,20 @@ export function TitleScreen({
           <div className="mt-10 text-white/40 text-xs text-center max-w-md leading-relaxed">
             WASD/Segeln · Maus Umschauen · E Interagieren · F3 FPS · M Ton
           </div>
+          <button
+            className={`mt-4 flex items-center gap-2.5 rounded-full border px-4 py-2 text-xs transition ${
+              gf ? "border-emerald-400/50 bg-emerald-900/40 text-emerald-200" : "border-white/15 bg-black/30 text-white/50 hover:text-white/75"
+            }`}
+            onClick={() => {
+              const next = !gf;
+              setGf(next);
+              saveGfMode(next);
+            }}
+            title="Praktisch glutenfrei kochen lernen — spielerisch, nicht klinisch. Jederzeit im Journal umschaltbar."
+          >
+            <span className={`w-2.5 h-2.5 rounded-full ${gf ? "bg-emerald-400" : "bg-white/25"}`} />
+            🌾 Glutenfrei-Modus {gf ? "an" : "aus"}
+          </button>
         </div>
       ) : (
         <button className="relative z-10 max-w-2xl px-8 text-center cursor-pointer" onClick={advance}>

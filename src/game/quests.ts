@@ -94,6 +94,19 @@ export const QUESTS: QuestDef[] = [
       s.player.items.karte = (s.player.items.karte ?? 0) + 1;
     },
   },
+  {
+    id: "q_getrennt",
+    title: "Getrennte Utensilien",
+    giver: "tove",
+    desc: "Tove zeigt dir ihr Kochfeld: „Glutenfrei heißt getrennt — eigener Löffel, eigenes Brett, eigenes Sieb. Und auf den Packungen suchst du die durchgestrichene Ähre. Kein Hexenwerk, nur Handwerk. Koch mir etwas Glutenfreies, mindestens zwei Zutaten.“",
+    goalDesc: (s) => (s.gfMealCooked ? "Glutenfrei gekocht — zurück zu Tove." : "Koche am Feuer (K) etwas Glutenfreies (≥ 2 Zutaten)."),
+    isDone: (s) => s.gfMealCooked === true,
+    reward: "+30 Einsicht, 1× Leinentuch, Toves Kochfeld-Wissen",
+    applyReward: (s) => {
+      s.player.xp += 30;
+      s.materials.tuch = (s.materials.tuch ?? 0) + 1;
+    },
+  },
 ];
 
 export function questState(s: SaveGame, id: string): "unknown" | "active" | "done" {
@@ -115,6 +128,8 @@ export function offerableQuests(s: SaveGame, npcId: string): QuestDef[] {
     // q_holz2 erst nach q_holz1, q_mutprobe erst nach q_tee (Ben öffnet sich erst)
     if (q.id === "q_holz2") return questState(s, "q_holz1") === "done";
     if (q.id === "q_mutprobe") return questState(s, "q_tee") === "done";
+    // Toves Kontaminations-Lektion nur im Glutenfrei-Modus
+    if (q.id === "q_getrennt") return s.glutenFree === true;
     return true;
   });
 }

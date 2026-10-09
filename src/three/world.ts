@@ -615,6 +615,8 @@ export class GameWorld {
     this.save.activeMeals = pruneMeals(this.save.activeMeals, now).concat(mealsToActive(dish, now));
     this.save.mealsCooked++;
     this.save.recentMicros = [...this.save.recentMicros, { micros: dish.micros, at: now }].slice(-6);
+    // Tove-Quest (M3): einmal glutenfrei mit ≥ 2 Zutaten gekocht
+    if (this.save.glutenFree && dish.gluten === "frei" && ids.length >= 2) this.save.gfMealCooked = true;
     // Rezept lernen
     if (dish.matchedRecipeId && !this.save.recipesFound.includes(dish.matchedRecipeId)) {
       this.save.recipesFound.push(dish.matchedRecipeId);
@@ -1333,6 +1335,7 @@ export class GameWorld {
         targetDist: Math.round(distT),
         timeOfDay: this.save.timeOfDay,
         storm: this.storm,
+        glutenFree: this.save.glutenFree,
         fps: Math.round(this.fpsEma),
         fireBuffUntil: this.fireBuffUntil,
         damageFlash: Math.max(0, store.get().damageFlash - 0.34),

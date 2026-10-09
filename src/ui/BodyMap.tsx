@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { getWorld } from "../game/runtime";
-import { mealBonus, type MicroKey } from "../game/cooking";
+import { mealBonus, GF_WATCH, type MicroKey } from "../game/cooking";
 
 interface Zone {
   id: string;
@@ -112,6 +112,9 @@ export function useBodyStatus(): Record<string, ZoneStatus> {
 export function BodyMap() {
   const status = useBodyStatus();
   const [hover, setHover] = useState<string | null>(null);
+  const gfMode = getWorld()?.getSave().glutenFree ?? false;
+  const recent = getWorld()?.getSave().recentMicros ?? [];
+  const microSum = (k: MicroKey) => recent.reduce((s, r) => s + (r.micros[k] ?? 0), 0);
 
   return (
     <div className="flex gap-5 items-start">
@@ -199,6 +202,28 @@ export function BodyMap() {
           Die Karte zeigt, was du zuletzt gegessen hast und was gerade wirkt. Sie ist Wissensvermittlung, keine
           medizinische Beratung.
         </p>
+        {/* Mangel-Wächter (nur Info): bei langem glutenfreien Spiel im Blick behalten */}
+        {gfMode && (
+          <div className="rounded-xl border border-amber-400/25 bg-amber-900/20 px-3 py-2.5 mt-2">
+            <div className="text-[11px] uppercase tracking-wider text-amber-200/75 mb-1.5">🌾 Mangel-Wächter (Glutenfrei-Modus)</div>
+            <div className="space-y-1">
+              {GF_WATCH.map((w) => {
+                const sum = microSum(w.micro);
+                const ok = sum >= 25;
+                return (
+                  <div key={w.micro} className="flex items-baseline gap-2 text-[11px]">
+                    <span className={ok ? "text-emerald-300" : "text-amber-300"}>{ok ? "✓" : "•"}</span>
+                    <span className="text-white/80 font-medium">{w.label}</span>
+                    <span className="text-white/45">— im Spiel: {w.sources}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-white/35 mt-1.5 leading-relaxed">
+              Bei Zöliakie sind diese vier öfter im Blick zu behalten — nur ein Hinweis, keine Diagnose.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

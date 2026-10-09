@@ -246,6 +246,46 @@ export function computeDish(ingredientIds: string[]): DishResult | null {
   };
 }
 
+// ── Glutenfrei-Modus (M3, Bildungs-Feature) ──────────────────────────────────
+
+/** Echte, übliche Tauschwege: glutenhaltige Zutat → glutenfreie Alternative */
+export const SUBSTITUTIONS: Record<string, { id: string; as: string }[]> = {
+  weizenmehl: [
+    { id: "reis", as: "Reismehl" },
+    { id: "mandel", as: "Mandelmehl" },
+    { id: "buchweizen", as: "Buchweizenmehl" },
+  ],
+  vollkornbrot: [
+    { id: "kartoffel", as: "Kartoffelbrot" },
+    { id: "reis", as: "Reisbrot" },
+  ],
+  hafer: [
+    { id: "buchweizen", as: "Buchweizen-Flocken" },
+    { id: "reis", as: "Reisflocken" },
+    { id: "quinoa", as: "Quinoa-Flocken" },
+  ],
+};
+
+/** Sichere Vorratskammer (Lernziel): alles natürlich glutenfrei */
+export const GF_PANTRY = [
+  "reis", "buchweizen", "quinoa", "hafer", // (Hafer nur zertifiziert — im Spiel markiert)
+  "kartoffel", "linse", "walnuss", "mandel", "haselnuss", "kuerbiskerne", "leinsamen",
+  "apfel", "heidelbeere", "brennnessel", "champignon", "steinpilz",
+  "hering", "lachs", "makrele", "miesmuschel", "moewenei",
+  "milch", "kaese", "honig", "olivenoel", "nori",
+];
+
+export const GF_DISCLAIMER =
+  "Der Ernährungs-Modus ist Wissensvermittlung, keine medizinische Beratung. Bei Verdacht auf Zöliakie oder Glutenunverträglichkeit: ärztliche Abklärung.";
+
+/** Mangel-Wächter (nur Info): bei Zöliakie häufige Mangellage + Spiel-Quellen */
+export const GF_WATCH: { micro: MicroKey; label: string; sources: string }[] = [
+  { micro: "iron", label: "Eisen", sources: "Linsen, Kürbiskerne, Fisch" },
+  { micro: "B12", label: "B12", sources: "Fisch, Möweneier, Käse" },
+  { micro: "folate", label: "Folat", sources: "Linsen, Haselnüsse, Brennnessel" },
+  { micro: "zinc", label: "Zink", sources: "Kürbiskerne, Käse, Hafer (zertifiziert)" },
+];
+
 // ── Aktive Mahlzeiten im Spielstand ──────────────────────────────────────────
 
 export interface ActiveMeal {
