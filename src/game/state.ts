@@ -73,6 +73,9 @@ export interface SaveGame {
   glutenFree: boolean; // Glutenfrei-Modus (M3, Bildungs-Feature)
   gfMealCooked?: boolean; // einmal glutenfrei gekocht (Tove-Quest)
   equipment: string[]; // gefertigte Ausrüstung (M3): „gleitschirm“, später mehr
+  // Rededuelle (M3)
+  duelsDone: string[]; // abgeschlossene Duell-Ids
+  compassEntries: string[]; // erkannte Manipulations-Taktiken (Manipulations-Kompass)
 }
 
 const SAVE_KEY = "phaenomenautik3-save-v1";
@@ -132,6 +135,8 @@ export function newGame(): SaveGame {
     recentMicros: [],
     glutenFree: loadGfMode(),
     equipment: [],
+    duelsDone: [],
+    compassEntries: [],
   };
 }
 
@@ -204,6 +209,8 @@ export function loadSave(): SaveGame | null {
     s.recentMicros ??= [];
     s.glutenFree ??= loadGfMode();
     s.equipment ??= [];
+    s.duelsDone ??= [];
+    s.compassEntries ??= [];
     return s;
   } catch {
     return null;

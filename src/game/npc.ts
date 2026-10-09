@@ -88,4 +88,18 @@ export const NPCS: NpcDef[] = [
     greetingAgain: "{name} … schön, dass du wieder da bist. Ehrlich. Es wird leiser hier, wenn jemand da ist.",
     chips: ["Wie geht es dir?", "Was ist dir passiert?", "Ich bringe dir etwas von Tove", "Hast du eine Aufgabe für mich?"],
   },
+  {
+    id: "vessa",
+    name: "Vessa",
+    role: "die reisende Händlerin",
+    color: 0xc95a8a,
+    x: -6,
+    z: 26,
+    domains: ["meer"],
+    refersTo: { schiff: "Kaj", lore: "Mara" },
+    greeting:
+      "Ah — die Kapitänin persönlich. Nach unserem kleinen Geschäft handle ich nur noch ehrlich: Karten, Knoten, Seemannsgarn. Was darf es sein?",
+    greetingAgain: "Wieder da? Du siehst mich immer noch durch, oder? Gut so. Was brauchst du?",
+    chips: ["Was verkaufst du?", "Erzähl von deinen Reisen"],
+  },
 ];

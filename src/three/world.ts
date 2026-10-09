@@ -153,6 +153,7 @@ export class GameWorld {
         kaj: { x: wb.x + 1.5, z: wb.z + 2.2, faceDeg: 200 },
         ilse: { x: wb.x + 9, z: wb.z - 3.5, faceDeg: 130 },
         ben: { x: fire.x - 2.1, z: fire.z + 1.8, faceDeg: 40 },
+        vessa: { x: d.x + 2, z: d.z + 7, faceDeg: 185 },
       });
     }
 
@@ -258,7 +259,7 @@ export class GameWorld {
 
   get uiLock(): boolean {
     const st = store.get();
-    return !!(st.menuOpen || st.dead || st.dialogNpc || st.battlePhen || st.journalOpen || st.loreStone || st.chatOpen || st.cookOpen);
+    return !!(st.menuOpen || st.dead || st.dialogNpc || st.battlePhen || st.journalOpen || st.loreStone || st.chatOpen || st.cookOpen || st.duelId);
   }
 
   // ── Eingaben ─────────────────────────────────────────────────────
@@ -294,7 +295,7 @@ export class GameWorld {
         store.set({ cookOpen: false });
       } else if (st.journalOpen || st.dialogNpc || st.loreStone) {
         store.set({ journalOpen: false, dialogNpc: null, loreStone: null });
-      } else if (!st.battlePhen) {
+      } else if (!st.battlePhen && !st.duelId) {
         store.set({ menuOpen: !st.menuOpen });
       }
     }
@@ -884,12 +885,64 @@ export class GameWorld {
   }
 
   openDialog(npcId: string) {
+    // Rededuell (M3): Vessa startet ihr Duell statt des freien Dialogs
+    if (npcId === "vessa" && !this.save.duelsDone.includes("duell_vessa")) {
+      if (document.pointerLockElement) document.exitPointerLock();
+      audio.select();
+      store.set({ duelId: "duell_vessa" });
+      return;
+    }
     const mem = this.save.npcMemory[npcId] ?? { met: false, topics: [], favors: 0 };
     mem.met = true;
     this.save.npcMemory[npcId] = mem;
     if (document.pointerLockElement) document.exitPointerLock();
     audio.select();
     store.set({ dialogNpc: npcId });
+  }
+
+  // ── Rededuell-API (M3) ──
+  /** Kristalle bezahlen (Duell) — false bei Deckungslücke */
+  duelPay(n: number): boolean {
+    if (this.save.crystals < n) return false;
+    this.save.crystals -= n;
+    return true;
+  }
+
+  /** Handel abschließen: benannt = fairer Preis (Differenz zurück), sonst teuer */
+  duelSettle(kind: "named" | "unnamed", paid: number, fairPrice: number) {
+    if (kind === "named") {
+      const back = Math.max(0, paid - fairPrice);
+      if (back > 0) {
+        this.save.crystals += back;
+        store.toast(`${back} Kristalle zurück — fairer Preis.`, "good");
+      }
+      if (paid === 0 && this.save.crystals >= fairPrice) this.save.crystals -= fairPrice;
+      grantXp(this.save.player, 25);
+      this.save.player.items.karte = (this.save.player.items.karte ?? 0) + 1;
+      store.toast("+25 Einsicht — Muster erkannt. Karte erhalten.", "good");
+    } else {
+      if (paid >= fairPrice) {
+        this.save.player.items.karte = (this.save.player.items.karte ?? 0) + 1;
+        store.toast("Strömungskarte erhalten — teuer erkauft.", "info");
+      }
+      grantXp(this.save.player, 8);
+    }
+    this.persist();
+  }
+
+  /** Taktik in den Manipulations-Kompass aufnehmen (+Einsicht) */
+  addCompassEntry(tacticId: string) {
+    if (this.save.compassEntries.includes(tacticId)) return;
+    this.save.compassEntries.push(tacticId);
+    grantXp(this.save.player, 15);
+    audio.understand();
+    store.toast("🧭 Manipulations-Kompass: Eintrag hinzugefügt. +15 Einsicht.", "good");
+    this.persist();
+  }
+
+  finishDuel(id: string) {
+    if (!this.save.duelsDone.includes(id)) this.save.duelsDone.push(id);
+    this.persist();
   }
 
   readStone(id: string) {

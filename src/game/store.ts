@@ -31,6 +31,7 @@ export interface HudState {
   loreStone: string | null; // Id des offenen Lore-Steins
   chatOpen: boolean;
   cookOpen: boolean; // Koch-UI am Feuer (M3)
+  duelId: string | null; // aktives Rededuell (M3)
   glutenFree: boolean; // Glutenfrei-Modus (M3)
   meals: { name: string; kind: string; secondsLeft: number; crash: boolean }[]; // aktive Essens-Wirkungen
   damageFlash: number; // 0..1 roter Vignetten-Blitz
@@ -68,6 +69,7 @@ export const initialHud: HudState = {
   loreStone: null,
   chatOpen: false,
   cookOpen: false,
+  duelId: null,
   glutenFree: false,
   meals: [],
   damageFlash: 0,

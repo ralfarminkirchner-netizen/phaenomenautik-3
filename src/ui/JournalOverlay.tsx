@@ -10,10 +10,11 @@ import { store } from "../game/store";
 import { getWorld } from "../game/runtime";
 import { MATERIALS, matName } from "../game/materials";
 import { RECIPES, INGREDIENTS, GF_DISCLAIMER } from "../game/cooking";
+import { TACTICS } from "../game/duels";
 import { saveGfMode } from "../game/state";
 import { BodyMap } from "./BodyMap";
 
-type JournalTab = "atlas" | "koerper" | "rezepte";
+type JournalTab = "atlas" | "koerper" | "rezepte" | "kompass";
 
 export function JournalOverlay() {
   const [open, setOpen] = useState(store.get().journalOpen);
@@ -35,6 +36,7 @@ export function JournalOverlay() {
     { id: "atlas", label: "🗺 Atlas" },
     { id: "koerper", label: "🧍 Körper" },
     { id: "rezepte", label: "🍲 Rezepte" },
+    { id: "kompass", label: "🧭 Kompass" },
   ];
 
   return (
@@ -65,6 +67,37 @@ export function JournalOverlay() {
             <section>
               <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-3">Körperkarte — was wirkt gerade?</h3>
               <BodyMap />
+            </section>
+          )}
+          {tab === "kompass" && (
+            <section>
+              <h3 className="text-xs uppercase tracking-widest text-purple-300/70 mb-2">
+                Manipulations-Kompass ({save.compassEntries.length}/{TACTICS.length})
+              </h3>
+              {save.compassEntries.length === 0 ? (
+                <p className="text-white/50 italic">
+                  Noch leer. Manche Menschen auf Reisen wollen dich zu etwas bringen — benenne, was sie tun, und es
+                  verliert seine Macht. Die Taktik, wie sie sich anfühlt und das Gegenmittel landen dann hier.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {TACTICS.filter((t) => save.compassEntries.includes(t.id)).map((t) => (
+                    <li key={t.id} className="rounded-lg bg-purple-900/20 border border-purple-400/20 px-3 py-2.5">
+                      <div className="font-semibold text-purple-100">{t.name}</div>
+                      <div className="text-white/60 text-xs mt-0.5">
+                        <span className="text-white/40">Wie sie sich anfühlt:</span> {t.feelsLike}
+                      </div>
+                      <div className="text-emerald-200/80 text-xs mt-1">
+                        <span className="text-emerald-200/50">Gegenmittel:</span> {t.counter}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-white/35 text-[11px] leading-relaxed mt-3">
+                Diese Dynamiken lernst du hier im fiktiven Rahmen — damit du sie draußen früher erkennst. Erkennen ist
+                kein Vorwurf: Es ist der Moment, in dem ein Muster seine Macht verliert.
+              </p>
             </section>
           )}
           {tab === "rezepte" && (

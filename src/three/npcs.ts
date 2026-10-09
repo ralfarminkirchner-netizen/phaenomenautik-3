@@ -12,9 +12,13 @@ const MODEL_FOR: Record<string, ModelKey> = {
   kaj: "barbarian",
   ilse: "knight",
   ben: "rogue",
+  vessa: "roguePlain",
 };
 
 const SITTING: Record<string, boolean> = { ben: true };
+
+// Eigen-Tints zur Unterscheidung (niemals zwei gleich aussehende Menschen)
+const TINT: Record<string, number> = { ben: 0x556278, vessa: 0xc96a8a };
 
 export interface NpcSpot {
   x: number;
@@ -34,12 +38,13 @@ export class Npcs {
       const obj = cloneSkinned(MODEL_FOR[def.id]);
       normalizeHeight(obj, def.id === "kaj" ? 1.95 : 1.8);
       setShadows(obj, true, false);
-      // Ben: dunklerer Ton, Unterscheidung vom Spieler
-      if (def.id === "ben") {
+      // Eigen-Tint (Ben: dunklerer Ton; Vessa: Händler-Rosa) — Unterscheidung vom Spieler
+      const tint = TINT[def.id];
+      if (tint !== undefined) {
         obj.traverse((o) => {
           if (o instanceof THREE.Mesh) {
             const m = (o.material as THREE.MeshStandardMaterial).clone();
-            m.color = new THREE.Color(0.55, 0.62, 0.78);
+            m.color = new THREE.Color(tint);
             o.material = m;
           }
         });
