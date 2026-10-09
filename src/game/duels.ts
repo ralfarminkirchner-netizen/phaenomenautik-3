@@ -15,16 +15,16 @@ export interface TacticDef {
 }
 
 export const TACTICS: TacticDef[] = [
-  { id: "love_bombing", name: "Love Bombing", feelsLike: "Überschwängliche Bewunderung, die schneller kommt, als Vertrauen wachsen kann — und immer kurz vor der Bitte.", counter: "Tempo rausnehmen: „Schön gesagt. Worum geht es dir?" — echtes Lob braucht keine Gegenleistung." },
-  { id: "gaslighting", name: "Gaslighting", feelsLike: "„Das hast du nie gesagt — du verwechselst was." Die eigene Erinnerung fühlt sich plötzlich wackelig an.", counter: "Fakten sichern: Aufschreiben, Dritte einbeziehen. Der eigenen Wahrnehmung vertrauen." },
+  { id: "love_bombing", name: "Love Bombing", feelsLike: "Überschwängliche Bewunderung, die schneller kommt, als Vertrauen wachsen kann — und immer kurz vor der Bitte.", counter: "Tempo rausnehmen: „Schön gesagt. Worum geht es dir?“ — echtes Lob braucht keine Gegenleistung." },
+  { id: "gaslighting", name: "Gaslighting", feelsLike: "„Das hast du nie gesagt — du verwechselst was.“ Die eigene Erinnerung fühlt sich plötzlich wackelig an.", counter: "Fakten sichern: Aufschreiben, Dritte einbeziehen. Der eigenen Wahrnehmung vertrauen." },
   { id: "guilt_tripping", name: "Guilt-Tripping", feelsLike: "Schuldgefühle für eine Grenze, die gesund ist. „Nach allem, was ich für dich getan habe …“", counter: "Schuld prüfen: Gehört sie mir? Grenze benennen, ohne dich zu rechtfertigen." },
   { id: "darvo", name: "DARVO", feelsLike: "Deny – Attack – Reverse Victim & Offender: Erst Leugnen, dann Angriff, dann ist plötzlich DU die Täterin.", counter: "Nicht auf die Drehung einsteigen: beim Thema bleiben, Muster benennen, pausieren." },
-  { id: "moving_goalposts", name: "Moving Goalposts", feelsLike: "Du hast getan, was gefragt war — und plötzlich ist es nicht genug. Das Ziel wandert.", counter: "Die ursprüngliche Abmachung benennen: „Der Preis stand. Ich steige aus." — Aufschreiben hilft." },
-  { id: "projection", name: "Projection", feelsLike: "Er wirft dir genau das vor, was er selbst tut — und du verteidigst dich statt zuzuhören.", counter: "Nicht in die Verteidigung gehen: „Interessant, dass dir das auffällt." — Beobachten statt erklären." },
+  { id: "moving_goalposts", name: "Moving Goalposts", feelsLike: "Du hast getan, was gefragt war — und plötzlich ist es nicht genug. Das Ziel wandert.", counter: "Die ursprüngliche Abmachung benennen: „Der Preis stand. Ich steige aus“ — Aufschreiben hilft." },
+  { id: "projection", name: "Projection", feelsLike: "Er wirft dir genau das vor, was er selbst tut — und du verteidigst dich statt zuzuhören.", counter: "Nicht in die Verteidigung gehen: „Interessant, dass dir das auffällt.“ — Beobachten statt erklären." },
   { id: "triangulation", name: "Triangulation", feelsLike: "Eine dritte Partei wird eingespannt: „Alle anderen haben schon zugestimmt …“", counter: "Direkt bleiben: Entscheidungen zwischen zwei Personen, nicht über Stellvertreter." },
-  { id: "silent_treatment", name: "Silent Treatment", feelsLike: "Bestrafung durch Schweigen — du sollst weichgeklopft werden, bis du nachgibst.", counter: "Nicht betteln: „Ich bin bereit, wenn du reden willst." — Schweigen aushalten." },
+  { id: "silent_treatment", name: "Silent Treatment", feelsLike: "Bestrafung durch Schweigen — du sollst weichgeklopft werden, bis du nachgibst.", counter: "Nicht betteln: „Ich bin bereit, wenn du reden willst.“ — Schweigen aushalten." },
   { id: "foot_in_door", name: "Foot-in-the-door", feelsLike: "Erst ein winziges Ja, dann ein größeres — die Treppe zieht dich höher, als du wolltest.", counter: "Jede Stufe einzeln entscheiden: Ein früheres Ja verpflichtet zu nichts." },
-  { id: "word_salad", name: "Word Salad", feelsLike: "Viele Worte, kein Inhalt — du bist müder, aber nicht klüger nach dem Gespräch.", counter: "Auf eine Frage zurückführen: „Was genau willst du von mir?" — Nicht jedem Faden folgen." },
+  { id: "word_salad", name: "Word Salad", feelsLike: "Viele Worte, kein Inhalt — du bist müder, aber nicht klüger nach dem Gespräch.", counter: "Auf eine Frage zurückführen: „Was genau willst du von mir?“ — Nicht jedem Faden folgen." },
 ];
 
 export function tacticById(id: string): TacticDef | undefined {
