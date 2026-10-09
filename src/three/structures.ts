@@ -11,7 +11,15 @@ export type { PlacedStructure };
 export interface StructureRec {
   def: PlacedStructure;
   obj: THREE.Object3D;
-  deckY: number; // dynamisch (Floß folgt Wellen)
+  deckY: number; // dynamisch (Floß folgt Wellen, Aufzug fährt)
+  // Aufzug (M3)
+  platform?: THREE.Object3D;
+  baseY?: number;
+  topRideY?: number;
+  rideT?: number; // 0..1 Fahrposition
+  rideDir?: 0 | 1 | -1; // aktuelle Fahrtrichtung, 0 = steht
+  // Ventilator (M3)
+  spin?: THREE.Object3D;
 }
 
 const woodMat = new THREE.MeshStandardMaterial({ color: 0x8a6b45, roughness: 0.85 });
@@ -104,13 +112,25 @@ export class Structures {
     let obj: THREE.Object3D;
     if (def.type === "floss") obj = buildFloss();
     else if (def.type === "leiter") obj = buildLeiter(def);
+    else if (def.type === "ventilator") obj = buildVentilator();
+    else if (def.type === "aufzug") obj = buildAufzug(def);
     else obj = buildBruecke(def);
     obj.position.set(def.x, def.type === "floss" ? 0.1 : def.topY ? terrainHeight(def.x, def.z) : 0, def.z);
     obj.rotation.y = def.yaw;
     if (def.type === "bruecke") obj.position.y = (def.topY ?? terrainHeight(def.x, def.z));
     if (def.type === "leiter") obj.position.y = terrainHeight(def.x, def.z);
+    if (def.type === "ventilator" || def.type === "aufzug") obj.position.y = terrainHeight(def.x, def.z);
     this.group.add(obj);
     const rec: StructureRec = { def, obj, deckY: obj.position.y };
+    if (def.type === "aufzug") {
+      rec.baseY = terrainHeight(def.x, def.z) + 0.15;
+      rec.topRideY = (def.topY ?? rec.baseY + 8);
+      rec.deckY = rec.baseY;
+      rec.platform = obj.userData.platform as THREE.Object3D | undefined;
+    }
+    if (def.type === "ventilator") {
+      rec.spin = obj.userData.spin as THREE.Object3D | undefined;
+    }
     this.items.push(rec);
     if (live) this.dirty = true;
     return rec;
@@ -143,6 +163,15 @@ export class Structures {
           const top = d.topY ?? g0 + 4;
           return g0 + (s / 6.2) * (top - g0) + 0.1;
         }
+      } else if (d.type === "aufzug") {
+        // Plattform (1,8 × 1,7 m) trägt auf ihrer aktuellen Höhe
+        const dx = x - d.x;
+        const dz = z - d.z;
+        const c = Math.cos(-d.yaw);
+        const s = Math.sin(-d.yaw);
+        const lx = dx * c - dz * s;
+        const lz = dx * s + dz * c;
+        if (Math.abs(lx) < 1.0 && Math.abs(lz) < 1.0) return rec.deckY + 0.12;
       } else if (d.type === "bruecke") {
         const ex = d.ex ?? d.x;
         const ez = d.ez ?? d.z;
@@ -216,10 +245,162 @@ export class Structures {
     return { movedX, movedZ };
   }
 
+  /** Geräte (M3): Ventilator dreht & schiebt, Aufzug fährt zwischen den Stopps */
+  updateDevices(
+    dt: number,
+    t: number,
+    playerPos: { x: number; y: number; z: number },
+    pushPlayer: (fx: number, fz: number) => void,
+  ): { riding: StructureRec | null } {
+    let riding: StructureRec | null = null;
+    for (const rec of this.items) {
+      const d = rec.def;
+      if (d.type === "ventilator") {
+        if (rec.spin) rec.spin.rotation.z += dt * 7;
+        // Windkegel: 9 m weit, ±35°, Höhe ±3,5 m um die Nabe
+        const fx = Math.sin(d.yaw);
+        const fz = Math.cos(d.yaw);
+        const dx = playerPos.x - d.x;
+        const dz = playerPos.z - d.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 9 && Math.abs(playerPos.y - (rec.obj.position.y + 2.05)) < 3.5) {
+          const align = dist > 0.01 ? (dx * fx + dz * fz) / dist : 1;
+          if (align > 0.82) pushPlayer(fx * 13 * dt * align, fz * 13 * dt * align);
+        }
+      } else if (d.type === "aufzug") {
+        const base = rec.baseY ?? rec.obj.position.y;
+        const top = rec.topRideY ?? base + 8;
+        if (rec.rideDir && rec.rideDir !== 0) {
+          const span = Math.max(0.5, top - base);
+          rec.rideT = Math.min(1, Math.max(0, (rec.rideT ?? 0) + (rec.rideDir * dt * 2.2) / span));
+          if (rec.rideT === 0 || rec.rideT === 1) rec.rideDir = 0;
+        }
+        const y = base + (rec.rideT ?? 0) * (top - base);
+        const prevY = rec.deckY;
+        rec.deckY = y;
+        if (rec.platform) {
+          rec.platform.position.y = y - rec.obj.position.y;
+          rec.platform.rotation.y = Math.sin(t * 0.8 + d.x) * 0.02;
+        }
+        // Gegengewicht läuft entgegengesetzt
+        const cw = rec.obj.userData.counterweight as THREE.Object3D | undefined;
+        if (cw) cw.position.y = (rec.obj.userData.cwBaseY as number) - (y - base) * 0.85;
+        // Steht der Spieler drauf, fährt er mit
+        const onPlatform =
+          Math.abs(playerPos.x - d.x) < 1.1 && Math.abs(playerPos.z - d.z) < 1.1 && Math.abs(playerPos.y - prevY) < 0.6;
+        if (onPlatform && rec.rideDir !== 0) riding = rec;
+      }
+    }
+    return { riding };
+  }
+
+  /** Aufzug-Fahrt auslösen (E auf der Plattform): fährt zum jeweils anderen Stopp */
+  toggleRide(rec: StructureRec): boolean {
+    if (rec.def.type !== "aufzug") return false;
+    const pos = rec.rideT ?? 0;
+    rec.rideDir = pos < 0.5 ? 1 : -1;
+    return true;
+  }
+
+  /** Aufzug-Rec an einer Position (für Interaktions-Prompt) */
+  aufzugNear(x: number, z: number, range = 2.2): StructureRec | null {
+    for (const rec of this.items) {
+      if (rec.def.type !== "aufzug") continue;
+      if (Math.hypot(rec.def.x - x, rec.def.z - z) < range) return rec;
+    }
+    return null;
+  }
+
   /** Zum Speichern */
   toSave(): PlacedStructure[] {
     return this.items.map((r) => ({ ...r.def }));
   }
+}
+
+/** Ventilator: Dreibein-Gestell, Windkern-Nabe, vier Tuchflügel (M3) */
+export function buildVentilator(): THREE.Group {
+  const g = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * Math.PI * 2 + 0.5;
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 2.4, 5), woodMat);
+    leg.position.set(Math.cos(a) * 0.55, 1.0, Math.sin(a) * 0.55);
+    leg.rotation.z = Math.cos(a) * 0.42;
+    leg.rotation.x = -Math.sin(a) * 0.42;
+    leg.castShadow = true;
+    g.add(leg);
+  }
+  // Kern-Nabe (glüht schwach windgrün)
+  const coreMat = new THREE.MeshStandardMaterial({ color: 0x9fe8c8, emissive: 0x2a6a4a, emissiveIntensity: 1.4, roughness: 0.4 });
+  const spin = new THREE.Group();
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.22, 8), coreMat);
+  hub.rotation.x = Math.PI / 2;
+  spin.add(hub);
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const blade = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.85), sailMat);
+    blade.position.set(Math.sin(a) * 0.58, Math.cos(a) * 0.58, 0.1);
+    blade.rotation.z = -a;
+    blade.rotation.y = 0.55; // Anstellwinkel
+    blade.castShadow = true;
+    spin.add(blade);
+  }
+  spin.position.set(0, 2.05, 0.1);
+  g.add(spin);
+  g.userData.spin = spin;
+  return g;
+}
+
+/** Aufzug: zwei Stangen + Querträger, Seil, Gegengewicht (Stein), Plattform (M3) */
+export function buildAufzug(def: PlacedStructure): THREE.Group {
+  const g = new THREE.Group();
+  const base = terrainHeight(def.x, def.z);
+  const H = Math.max(3.5, (def.topY ?? base + 8) - base) + 1.2;
+  // Gestell
+  for (const s of [-0.9, 0.9]) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, H, 6), darkWood);
+    pole.position.set(s, H / 2, 0);
+    pole.castShadow = true;
+    g.add(pole);
+  }
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.2, 5), woodMat);
+  beam.rotation.z = Math.PI / 2;
+  beam.position.set(0, H, 0);
+  g.add(beam);
+  // Gegengewicht: Stein am Seil (Gegenseite)
+  const cw = new THREE.Group();
+  const cwRope = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, H - 1.4, 4), ropeMat);
+  cwRope.position.y = -(H - 1.4) / 2;
+  const stone = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 0), new THREE.MeshStandardMaterial({ color: 0x6d6a66, roughness: 0.95 }));
+  stone.position.y = -(H - 1.4);
+  stone.castShadow = true;
+  cw.add(cwRope, stone);
+  cw.position.set(0.9, H - 0.1, 0);
+  g.add(cw);
+  // Plattform: Bohlen + Seil zur Traverse (dynamisch bewegt)
+  const platform = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const plank = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.1, 0.5), woodMat);
+    plank.position.set(0, 0, (i - 1) * 0.55);
+    plank.castShadow = true;
+    plank.receiveShadow = true;
+    platform.add(plank);
+  }
+  const hang = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 1, 4), ropeMat);
+  hang.position.set(-0.9, 0.5, 0);
+  platform.add(hang);
+  // Erdkern unter der Plattform (glüht erdbernsteinfarben)
+  const core = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(0.14, 0),
+    new THREE.MeshStandardMaterial({ color: 0xe8b46a, emissive: 0x7a4a14, emissiveIntensity: 1.5, roughness: 0.4 }),
+  );
+  core.position.y = -0.28;
+  platform.add(core);
+  platform.position.set(0, 0.15, 0);
+  g.add(platform);
+  g.userData.platform = platform;
+  g.userData.counterweight = cw;
+  g.userData.cwBaseY = H - 0.1;
+  return g;
 }
 
 export function clampSpan(x0: number, z0: number, x1: number, z1: number, maxLen: number): { ex: number; ez: number } {

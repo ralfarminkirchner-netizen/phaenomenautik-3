@@ -88,6 +88,10 @@ const LOOT_STYLE: Record<string, { color: number; emissive?: number; shape: "box
   hering: { color: 0x8aa2b8, emissive: 0x1a2a3a, shape: "roll" },
   lachs: { color: 0xd88a6a, emissive: 0x3a1a10, shape: "roll" },
   makrele: { color: 0x6a8aa8, emissive: 0x102030, shape: "roll" },
+  // Elementar-Kerne (M3)
+  windkern: { color: 0x9fe8c8, emissive: 0x2a6a4a, shape: "ball" },
+  erdkern: { color: 0xe8b46a, emissive: 0x7a4a14, shape: "ball" },
+  feuerkern: { color: 0xe86a4a, emissive: 0x7a1e0a, shape: "ball" },
 };
 
 function makeLootMesh(matId: string): THREE.Mesh {
@@ -133,6 +137,7 @@ const MAT_ZONE: Record<string, Zone> = {
   stein: "inland", feder: "forest", muschel: "beach", harz: "forest", algen: "beach",
   knochen: "inland", feuerstein: "inland", schaufel: "harbor",
   regenschirm: "harbor", laterne: "harbor", zeltbahn: "harbor", ankerstein: "inland",
+  windkern: "inland", erdkern: "inland", feuerkern: "inland",
 };
 
 /** Zutaten (M3): wo wächst/liegt was. Fisch: Frischfang, den Möwen fallen lassen (selten). */

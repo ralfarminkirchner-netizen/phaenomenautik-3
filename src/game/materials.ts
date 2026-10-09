@@ -60,7 +60,18 @@ export const MATERIALS: MaterialDef[] = [
   { id: "laterne", name: "Sturmlaterne", kategorie: "kuriosa", gewicht: 0.8, desc: "Brennt auch, wenn die Welt pfeift." },
   { id: "zeltbahn", name: "Zeltbahn", kategorie: "kuriosa", gewicht: 3, desc: "Ein halbes Zuhause." },
   { id: "ankerstein", name: "Alter Ankerstein", kategorie: "kuriosa", gewicht: 22, desc: "Hält, was wichtig ist. Auch metaphorisch." },
+  // ── Magika: Elementar-Kerne (M3) — geben Geräten aus Grundmaterial erst Funktion ──
+  { id: "windkern", name: "Windkern", kategorie: "magika", gewicht: 0.7, desc: "Ein Wirbel in Faustgröße. Treibt Rotoren an, trägt Schirme, pustet Ideen voran." },
+  { id: "erdkern", name: "Erdkern", kategorie: "magika", gewicht: 1.1, desc: "Schwer wie ein Versprechen. Zieht Gegengewichte nach unten und Lasten nach oben." },
+  { id: "feuerkern", name: "Feuerkern", kategorie: "magika", gewicht: 0.6, brennbar: 0.2, desc: "Warm wie ein Kaminabend. Heizt, treibt an, hebt Ballone." },
 ];
+
+/** Verbindungstechniken (M3): wie Teile zusammenkommen — jede mit Physik-Regeln */
+export const VERBINDUNGEN: Record<string, { name: string; material: string; regel: string }> = {
+  kleben: { name: "Kleben (Harz)", material: "harz", regel: "Starr, brennbar — heilt bei Hitze nach. Trägt wenig, hält schnell." },
+  draht: { name: "Verdrahten (Kette/Ring)", material: "kette", regel: "Starr, überträgt Kraft — für Rotoren, Achsen, Züge." },
+  seil: { name: "Drumwickeln (Seil)", material: "seil", regel: "Flexibel, dämpft, zieht — für Aufzüge, Brücken, Segel." },
+};
 
 export function matById(id: string): MaterialDef | undefined {
   return MATERIALS.find((m) => m.id === id);
@@ -75,6 +86,8 @@ export interface BuildableDef {
   materials: Record<string, number>;
   desc: string;
   hint: string; // Platzierungsregel als Klartext
+  verbindung?: string; // Verbindungstechnik (VERBINDUNGEN)
+  craftOnly?: boolean; // wird gefertigt statt platziert (Ausrüstung)
 }
 
 export const BUILDABLES: BuildableDef[] = [
@@ -101,6 +114,36 @@ export const BUILDABLES: BuildableDef[] = [
     materials: { bohle: 4, seil: 2 },
     desc: "Vier Bohlen über einen Graben. Hält — Kaj hat es durchgerechnet.",
     hint: "Über eine Lücke oder seichtes Wasser spannen (max. 14 m).",
+    verbindung: "seil",
+  },
+  // ── Geräte (M3 MacGyver++): Kerne geben Grundmaterialien erst Funktion ──
+  {
+    id: "gleitschirm",
+    name: "Gleitschirm",
+    keywords: ["gleitschirm", "schirm", "gleiter", "paragleiter"],
+    materials: { tuch: 2, stange: 2, windkern: 1 },
+    desc: "Tuch, Stangen, ein Windkern — Zeldas Paragleiter. In der Luft Leertaste halten: gleiten, Luftströmungen nutzen.",
+    hint: "Wird gefertigt, nicht platziert — danach gehört er dir.",
+    verbindung: "draht",
+    craftOnly: true,
+  },
+  {
+    id: "ventilator",
+    name: "Ventilator",
+    keywords: ["ventilator", "windmaschine", "lüfter", "lüfterrad", "luefter"],
+    materials: { stange: 2, tuch: 1, windkern: 1 },
+    desc: "Windkern im Holzgestell, Tuchflügel — bläst dich (und Flöße) voran.",
+    hint: "Auf ebenem Boden aufstellen — der Windkegel zeigt in deine Blickrichtung.",
+    verbindung: "draht",
+  },
+  {
+    id: "aufzug",
+    name: "Aufzug",
+    keywords: ["aufzug", "lift", "fahrstuhl", "plattform"],
+    materials: { stange: 2, seil: 2, stein: 2, erdkern: 1 },
+    desc: "Seil, Gegengewicht, Erdkern — eine Plattform, die dich 8 m hebt oder senkt.",
+    hint: "Auf festem Boden stellen — [E] auf der Plattform fährt hoch bzw. runter.",
+    verbindung: "seil",
   },
 ];
 

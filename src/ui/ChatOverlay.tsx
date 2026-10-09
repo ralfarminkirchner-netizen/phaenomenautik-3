@@ -42,7 +42,7 @@ function ChatInner() {
     const save = world.getSave();
 
     if (parsed.kind === "help") {
-      return "Grammatik: BAUE <objekt>. Baubar: Floß (4 Treibstamm + 2 Hanseil), Strickleiter (3 Stangen + 1 Hanseil), Bohlenbrücke (4 Bohlen + 2 Hanseil). Material liegt in der Welt — glänzt leicht. Inventar im Journal (J).";
+      return "Grammatik: BAUE <objekt>. Baubar: Floß (4 Treibstamm + 2 Hanseil), Strickleiter (3 Stangen + 1 Hanseil), Bohlenbrücke (4 Bohlen + 2 Hanseil) — und Geräte: Gleitschirm (2 Tuch + 2 Stangen + Windkern, wird gefertigt), Ventilator (2 Stangen + 1 Tuch + Windkern), Aufzug (2 Stangen + 2 Seile + 2 Steine + Erdkern). Kerne sind seltene Funde im Landesinneren. Inventar im Journal (J).";
     }
     if (parsed.kind === "build") {
       const def = parsed.def;

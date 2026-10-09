@@ -27,7 +27,7 @@ export type TravelMode = "sailing" | "onfoot";
 
 export interface PlacedStructure {
   id: string;
-  type: "floss" | "leiter" | "bruecke";
+  type: "floss" | "leiter" | "bruecke" | "ventilator" | "aufzug";
   x: number;
   z: number;
   yaw: number;
@@ -72,6 +72,7 @@ export interface SaveGame {
   recentMicros: { micros: Partial<Record<MicroKey, number>>; at: number }[]; // Mikros der letzten Mahlzeiten (Körperkarte)
   glutenFree: boolean; // Glutenfrei-Modus (M3, Bildungs-Feature)
   gfMealCooked?: boolean; // einmal glutenfrei gekocht (Tove-Quest)
+  equipment: string[]; // gefertigte Ausrüstung (M3): „gleitschirm“, später mehr
 }
 
 const SAVE_KEY = "phaenomenautik3-save-v1";
@@ -130,6 +131,7 @@ export function newGame(): SaveGame {
     mealsCooked: 0,
     recentMicros: [],
     glutenFree: loadGfMode(),
+    equipment: [],
   };
 }
 
@@ -201,6 +203,7 @@ export function loadSave(): SaveGame | null {
     s.mealsCooked ??= 0;
     s.recentMicros ??= [];
     s.glutenFree ??= loadGfMode();
+    s.equipment ??= [];
     return s;
   } catch {
     return null;

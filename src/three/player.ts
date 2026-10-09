@@ -31,7 +31,7 @@ const COYOTE = 0.14;
 const BUFFER = 0.14;
 const CLIMB_SPEED = 2.1;
 
-type LocoState = "idle" | "walk" | "run" | "air" | "climb";
+type LocoState = "idle" | "walk" | "run" | "air" | "climb" | "glide";
 
 export class Player {
   group = new THREE.Group();
@@ -47,6 +47,8 @@ export class Player {
   hitT = 0;
   speed2D = 0;
   climbing: { def: ClimbWallDef; u: number; v: number } | null = null;
+  hasGlider = false; // M3: gefertigter Gleitschirm (Ausrüstung)
+  gliding = false;
 
   private rig: THREE.Object3D;
   private mixer: THREE.AnimationMixer;
@@ -297,7 +299,30 @@ export class Player {
       });
     }
 
-    this.vel.y -= GRAVITY * dt;
+    // Gleitschirm (M3): in der Luft Leertaste halten — sanftes Sinken, Auftrieb
+    // in Blickrichtung. Kostet Ausdauer; ist sie leer, wird es ein normaler Fall.
+    if (this.hasGlider && !this.grounded && input.jump && this.vel.y < 1.5 && (!climb || climb.drain(2.2, dt))) {
+      if (!this.gliding) {
+        particles.burst(10, {
+          x: this.pos.x, y: this.pos.y + 0.4, z: this.pos.z, spread: 1.1,
+          vy: 0.4, life: 0.5, size: 1.6, color: [0.85, 0.92, 1.0], gravity: 1, drag: 0.94,
+        });
+      }
+      this.gliding = true;
+      this.vel.y = Math.max(this.vel.y - GRAVITY * dt * 0.12, -1.6);
+      const fx = -Math.sin(this.camYaw);
+      const fz = -Math.cos(this.camYaw);
+      this.vel.x += fx * 22 * dt;
+      this.vel.z += fz * 22 * dt;
+      const sp = Math.hypot(this.vel.x, this.vel.z);
+      if (sp > 9.5) {
+        this.vel.x *= 9.5 / sp;
+        this.vel.z *= 9.5 / sp;
+      }
+    } else {
+      this.gliding = false;
+      this.vel.y -= GRAVITY * dt;
+    }
     this.vel.y = Math.max(this.vel.y, -30);
 
     const step = (dx: number, dz: number) => {
@@ -377,10 +402,15 @@ export class Player {
 
     let want: LocoState;
     if (this.climbing) want = "climb";
+    else if (this.gliding) want = "glide";
     else if (!this.grounded) want = "air";
     else if (this.speed2D > 7.2) want = "run";
     else if (this.speed2D > 0.7) want = "walk";
     else want = "idle";
+
+    // Gleit-Haltung: Rigg neigt sich nach vorn
+    const leanTarget = this.gliding ? 0.55 : 0;
+    this.rig.rotation.x += (leanTarget - this.rig.rotation.x) * Math.min(1, dt * 6);
 
     if (this.attackT <= 0 && this.dodgeT <= 0 && this.hitT <= 0) {
       if (want !== this.loco) {
@@ -397,6 +427,9 @@ export class Player {
             break;
           case "air":
             this.play("Jump_Idle", 0.1);
+            break;
+          case "glide":
+            this.play(this.actions.has("Hang_Glide") ? "Hang_Glide" : "Jump_Idle", 0.16);
             break;
           case "climb":
             this.play(this.actions.has("Climbing_A") ? "Climbing_A" : "Jump_Idle", 0.14);

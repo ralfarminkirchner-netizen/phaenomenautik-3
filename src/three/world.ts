@@ -17,7 +17,7 @@ import { HARBOR, ISLANDS, islandAt, terrainHeight, terrainSlope } from "../game/
 import { persistSave, grantXp, checkFinalUnlock, type SaveGame, type PlayerState } from "../game/state";
 import { Npcs } from "./npcs";
 import { Loot } from "./loot";
-import { Structures, buildFloss, buildLeiter, buildBruecke, clampSpan } from "./structures";
+import { Structures, buildFloss, buildLeiter, buildBruecke, buildVentilator, buildAufzug, clampSpan } from "./structures";
 import { BUILDABLES, missingMaterials, matName, matCostText, type BuildableDef } from "../game/materials";
 import { LoreStones } from "./lorestones";
 import { Creature } from "./creature";
@@ -481,6 +481,22 @@ export class GameWorld {
       this.currentPrompt = { key: "E", text: "An Bord der TOLERANZ gehen", action: () => this.board() };
       return;
     }
+    // Aufzug fahren (M3)
+    {
+      const lift = this.structures.aufzugNear(p.x, p.z);
+      if (lift && Math.abs(p.y - lift.deckY) < 1.4) {
+        const up = (lift.rideT ?? 0) < 0.5;
+        this.currentPrompt = {
+          key: "E",
+          text: up ? "Aufzug: hochfahren (Erdkern)" : "Aufzug: hinunterfahren (Erdkern)",
+          action: () => {
+            this.structures.toggleRide(lift);
+            audio.confirm();
+          },
+        };
+        return;
+      }
+    }
     // Baum fällen
     const tree = this.props.nearestTree(p.x, p.z, 3.4);
     if (tree) {
@@ -932,10 +948,28 @@ export class GameWorld {
       store.toast(`Für „${def.name}“ fehlt: ${missing.map((m) => `${m.need}× ${matName(m.id)}`).join(", ")}`, "bad");
       return;
     }
+    // Fertigung statt Platzierung (M3): Ausrüstung wie der Gleitschirm
+    if (def.craftOnly) {
+      for (const [id, n] of Object.entries(def.materials)) {
+        this.save.materials[id] = (this.save.materials[id] ?? 0) - n;
+      }
+      if (!this.save.equipment.includes(def.id)) this.save.equipment.push(def.id);
+      audio.confirm();
+      store.toast(
+        def.id === "gleitschirm"
+          ? "Gleitschirm gefertigt. In der Luft [Leertaste] halten — der Windkern trägt."
+          : `${def.name} gefertigt.`,
+        "good",
+      );
+      this.persist();
+      return;
+    }
     this.cancelBuild();
     let ghost: THREE.Object3D;
     if (def.id === "floss") ghost = buildFloss();
     else if (def.id === "leiter") ghost = buildLeiter({ id: "ghost", type: "leiter", x: 0, z: 0, yaw: 0 });
+    else if (def.id === "ventilator") ghost = buildVentilator();
+    else if (def.id === "aufzug") ghost = buildAufzug({ id: "ghost", type: "aufzug", x: 0, z: 0, yaw: 0, topY: terrainHeight(0, 0) + 8 });
     else ghost = buildBruecke({ id: "ghost", type: "bruecke", x: 0, z: 0, yaw: 0, ex: 0, ez: 8 });
     ghost.traverse((o) => {
       if (o instanceof THREE.Mesh) {
@@ -987,6 +1021,23 @@ export class GameWorld {
       b.valid = gTop - g0 > 1.6;
       b.ghost.position.set(b.x, g0, b.z);
       b.ghost.rotation.y = b.yaw + Math.PI;
+    } else if (b.def.id === "ventilator") {
+      // Ventilator: 2,5 m vor dem Spieler auf ebenem Boden, Windkegel in Blickrichtung
+      b.x = p.x + fx * 2.5;
+      b.z = p.z + fz * 2.5;
+      const g = terrainHeight(b.x, b.z);
+      b.valid = g > 0.3 && terrainSlope(b.x, b.z) < 0.4;
+      b.ghost.position.set(b.x, g, b.z);
+      b.ghost.rotation.y = b.yaw;
+    } else if (b.def.id === "aufzug") {
+      // Aufzug: 2 m vor dem Spieler auf festem Boden, oberer Stopp = Basis + 8 m
+      b.x = p.x + fx * 2.0;
+      b.z = p.z + fz * 2.0;
+      const g = terrainHeight(b.x, b.z);
+      b.topY = g + 8;
+      b.valid = g > 0.3;
+      b.ghost.position.set(b.x, g, b.z);
+      b.ghost.rotation.y = b.yaw;
     } else {
       // Brücke: Start vor dem Spieler, Ende bis zu 14 m in Blickrichtung
       b.x = p.x + fx * 1.5;
@@ -1026,7 +1077,7 @@ export class GameWorld {
     }
     const def = {
       id: `b_${b.def.id}_${Date.now() % 100000}`,
-      type: b.def.id as "floss" | "leiter" | "bruecke",
+      type: b.def.id as "floss" | "leiter" | "bruecke" | "ventilator" | "aufzug",
       x: b.x,
       z: b.z,
       yaw: b.ghost.rotation.y,
@@ -1203,6 +1254,26 @@ export class GameWorld {
       } else {
         this.structures.updateRafts(dt, t, (x, z) => this.water.heightAt(x, z, t), { active: false, dirX: 0, dirZ: 0, rec: null });
       }
+      // Geräte (M3): Ventilator-Schub, Aufzug-Fahrt — der Spieler fährt mit
+      const dev = this.structures.updateDevices(dt, t, this.player.pos, (fx, fz) => {
+        // Schub: Impuls plus sanfte Verdrängung (Reibung frisst reine Geschwindigkeit)
+        this.player.vel.x += fx * 2.0;
+        this.player.vel.z += fz * 2.0;
+        const nx = this.player.pos.x + fx * 0.5;
+        const nz = this.player.pos.z + fz * 0.5;
+        const gHere = this.groundAt(this.player.pos.x, this.player.pos.z);
+        const gNext = this.groundAt(nx, nz);
+        if (gNext > -0.55 && gNext - gHere < 1.2) {
+          this.player.pos.x = nx;
+          this.player.pos.z = nz;
+        }
+      });
+      if (dev.riding) {
+        this.player.pos.y = dev.riding.deckY + 0.12;
+        this.player.vel.y = 0;
+        this.player.grounded = true;
+      }
+      this.player.hasGlider = this.save.equipment.includes("gleitschirm");
       this.loot.update(t, this.elapsed, this.camera.position);
 
       // Begegnungs-Kamera: rahmt Spieler und Wächter
