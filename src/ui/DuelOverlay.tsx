@@ -53,7 +53,6 @@ function DuelInner({ def }: { def: DuelDef }) {
   const [npcLine, setNpcLine] = useState(def.beats[0].npc);
   const [named, setNamed] = useState<string[]>([]);
   const [paid, setPaid] = useState(0);
-  const [gaveIn, setGaveIn] = useState(0);
   const [missed, setMissed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -89,7 +88,6 @@ function DuelInner({ def }: { def: DuelDef }) {
     }
     // Haltung wirkt
     if (h === "nachgeben") {
-      setGaveIn((g) => g + 1);
       if (idx === 1) {
         // Kaufangebot annehmen
         if (world.duelPay(def.priceCrystals)) setPaid((p) => p + def.priceCrystals);
@@ -109,8 +107,8 @@ function DuelInner({ def }: { def: DuelDef }) {
     const reply =
       h === "nachgeben" ? beat.onNachgeben : h === "nachfragen" ? beat.onNachfragen : beat.onGrenze;
     if (reply) setNpcLine(reply);
-    // Grenze beim Goalpost-Beat oder jede 2. Antwort → weiter
-    if (h === "grenze" || idx === 2 || (h !== "muster" && idx >= 1)) {
+    // Grenze immer, sonst ab dem Angebots-Beat: nach der Antwort → weiter
+    if (h === "grenze" || idx >= 1) {
       window.setTimeout(() => advanceOrResolve(idx), 900);
     }
   };

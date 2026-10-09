@@ -270,7 +270,7 @@ export class Structures {
       } else if (d.type === "aufzug") {
         const base = rec.baseY ?? rec.obj.position.y;
         const top = rec.topRideY ?? base + 8;
-        if (rec.rideDir && rec.rideDir !== 0) {
+        if (rec.rideDir) {
           const span = Math.max(0.5, top - base);
           rec.rideT = Math.min(1, Math.max(0, (rec.rideT ?? 0) + (rec.rideDir * dt * 2.2) / span));
           if (rec.rideT === 0 || rec.rideT === 1) rec.rideDir = 0;
