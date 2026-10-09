@@ -36,9 +36,9 @@ export class Ship {
     model.rotation.y = MODEL_YAW;
     setShadows(model, true, false);
     this.group.add(model);
-    // Segel-Knoten für Einholen/Aussetzen
+    // Segel-Knoten für Einholen/Aussetzen (GLB-Namen: Front_Sail mit Unterstrich!)
     model.traverse((o) => {
-      if (["BackSail", "Front Sail", "MidleSail"].includes(o.name)) this.sailNodes.push(o);
+      if (["BackSail", "Front_Sail", "MidleSail"].includes(o.name)) this.sailNodes.push(o);
     });
 
     scene.add(this.group);

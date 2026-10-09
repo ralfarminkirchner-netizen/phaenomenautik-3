@@ -1562,9 +1562,10 @@ export class GameWorld {
 
     this.updateClouds(dt, focus);
     this.bloom.enabled = this.qualityLevel < 3;
-    // Planare Wasser-Reflexion (Qualität Hoch): Spiegel-Pass vor dem Hauptbild,
-    // jeden 2. Frame — Wellen bewegen sich langsam genug für 30 Hz-Spiegel
-    if (this.qualityLevel < 2 && (this.reflFrame++ & 1) === 0)
+    // Planare Wasser-Reflexion, gestaffelt: Stufe 0/1 = jedes 2. Frame (30 Hz),
+    // Stufe 2 = jedes 4. Frame (15 Hz), Stufe 3 = aus (analytischer Himmel bleibt)
+    const reflEvery = this.qualityLevel < 2 ? 2 : this.qualityLevel === 2 ? 4 : 0;
+    if (reflEvery > 0 && this.reflFrame++ % reflEvery === 0)
       this.water.renderReflection(this.renderer, this.scene, this.camera);
     this.composer.render();
   };
@@ -1602,22 +1603,44 @@ export class GameWorld {
   };
 
   private applyQuality() {
+    // M4.1-Lektion: Schatten NIE ganz aus (ohne sie „schwebt“ alles) —
+    // stattdessen die Schatten-Map verkleinern; Reflexion gestaffelt ausdünnen.
+    const sunShadow = this.sky.sun.shadow;
+    const setShadowRes = (px: number) => {
+      if (sunShadow.mapSize.x !== px) {
+        sunShadow.mapSize.set(px, px);
+        sunShadow.map?.dispose();
+        sunShadow.map = null;
+      }
+    };
     switch (this.qualityLevel) {
       case 0:
         this.composer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
         this.water.setHighQuality(true);
+        this.water.setReflection(true);
+        setShadowRes(2048);
         this.renderer.shadowMap.enabled = true;
         break;
       case 1:
         this.composer.setPixelRatio(1.25);
+        this.water.setHighQuality(true);
+        this.water.setReflection(true);
+        setShadowRes(1536);
+        this.renderer.shadowMap.enabled = true;
         break;
       case 2:
         this.composer.setPixelRatio(1);
         this.water.setHighQuality(false);
+        this.water.setReflection(true); // selten aktualisiert (Loop: jedes 4. Frame)
+        setShadowRes(1024);
+        this.renderer.shadowMap.enabled = true;
         break;
       case 3:
-        this.renderer.shadowMap.enabled = false;
         this.composer.setPixelRatio(0.85);
+        this.water.setHighQuality(false);
+        this.water.setReflection(false);
+        setShadowRes(512); // Schatten bleiben — klein, aber da
+        this.renderer.shadowMap.enabled = true;
         break;
     }
   }

@@ -352,13 +352,19 @@ export class Water {
     scene.add(this.mesh);
   }
 
-  /** Qualitätsumschaltung (Performance-Budget). „lo" schaltet auch die
-   *  planare Reflexion ab — der analytische Himmel bleibt als Reflexion. */
+  /** Qualitätsumschaltung (Performance-Budget). „lo" schaltet die
+   *  Detail-Geometrie ab; die planare Reflexion wird separat gesteuert. */
   setHighQuality(hi: boolean) {
-    this.reflEnabled = hi;
     if (hi === this.useHi) return;
     this.useHi = hi;
     this.mesh.geometry = hi ? this.hiGeo : this.loGeo;
+  }
+
+  /** Planare Reflexion separat schalten (Qualitätsleiter: Stufe 2 = selten, 3 = aus).
+   *  Beim Abschalten uReflOn sofort auf 0 — sonst friert das letzte Spiegelbild ein. */
+  setReflection(on: boolean) {
+    this.reflEnabled = on;
+    if (!on) this.mat.uniforms.uReflOn.value = 0;
   }
 
   /** Reflexions-Target an den Viewport koppeln (halbe Auflösung). */

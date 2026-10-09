@@ -109,9 +109,9 @@ export function paletteFor(timeOfDay: number, storm: number): SkyPalette {
   const dusk = (1 - Math.abs(elevation - 0.12) / 0.2) * (elevation > -0.1 ? 1 : 0);
   const duskC = clamp(dusk, 0, 1) * (1 - storm * 0.6);
 
-  const zenithDay = new THREE.Color(0.12, 0.34, 0.72);
+  const zenithDay = new THREE.Color(0.1, 0.3, 0.7);
   const zenithNight = new THREE.Color(0.012, 0.02, 0.06);
-  const horizonDay = new THREE.Color(0.5, 0.72, 0.88);
+  const horizonDay = new THREE.Color(0.44, 0.66, 0.86);
   const horizonNight = new THREE.Color(0.045, 0.07, 0.14);
   const duskTint = new THREE.Color(0.98, 0.52, 0.28);
 
@@ -132,7 +132,7 @@ export function paletteFor(timeOfDay: number, storm: number): SkyPalette {
     sunColor,
     fog,
     sunIntensity: lerp(0.02, 2.6, day) * (1 - storm * 0.55),
-    hemiIntensity: lerp(0.16, 0.85, day) * (1 - storm * 0.4),
+    hemiIntensity: lerp(0.15, 0.78, day) * (1 - storm * 0.4),
     night: 1 - day,
   };
 }
