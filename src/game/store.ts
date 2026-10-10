@@ -1,6 +1,11 @@
 // PHÄNOMENAUTIK 3 — Mini-Store: Brücke zwischen Game-Loop (three.js) und React-HUD
 
+import type { RoomId } from "./openWorld";
+
 export interface HudState {
+  openWorldRevision: number;
+  activeRoom: RoomId | null;
+  encounterId: string | null;
   mode: "title" | "sailing" | "onfoot";
   stability: number;
   maxStability: number;
@@ -44,6 +49,9 @@ export interface HudState {
 }
 
 export const initialHud: HudState = {
+  openWorldRevision: 0,
+  activeRoom: null,
+  encounterId: null,
   mode: "title",
   stability: 1,
   maxStability: 1,

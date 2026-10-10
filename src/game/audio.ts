@@ -104,11 +104,11 @@ class AudioEngine {
   }
 
   /** 0 = ruhig, 1 = voller Sturm */
-  setStormIntensity(v: number) {
+  setStormIntensity(v: number, windSpeed = v * 12, soundMask = v) {
     if (this.paused || !this.ctx || !this.windGain || !this.noiseGain) return;
     const t = this.ctx.currentTime;
-    this.windGain.gain.linearRampToValueAtTime(v * 0.14, t + 0.8);
-    this.noiseGain.gain.linearRampToValueAtTime(0.1 + v * 0.12, t + 0.8);
+    this.windGain.gain.setTargetAtTime(Math.min(0.18, windSpeed * 0.012), t, 0.3);
+    this.noiseGain.gain.setTargetAtTime(0.07 + soundMask * 0.12, t, 0.3);
   }
 
   thunder() {

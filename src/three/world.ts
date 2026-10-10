@@ -12,7 +12,7 @@ import { Player } from "./player";
 import { ShadowEnemy } from "./enemy";
 import { Beacon } from "./beacon";
 import { ParticleSystem } from "./particles";
-import { clamp, lerp, mulberry32, fbm2 } from "../game/noise";
+import { clamp, lerp, mulberry32 } from "../game/noise";
 import { HARBOR, ISLANDS, islandAt, terrainHeight, terrainSlope } from "../game/worldLayout";
 import { persistSave, grantXp, checkFinalUnlock, hasUnreadableSave, type SaveGame, type PlayerState } from "../game/state";
 import { Npcs } from "./npcs";
@@ -35,7 +35,10 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
-const DAY_LENGTH_S = 1080; // 18 Minuten = 1 Spieltag
+import { createFixedStepper } from "../game/fixedStep";
+import { ROOMS, ensureOpenWorld, stepOpenWorld, sampleFields, applyWorldAction, addObservation, reviseObservation, type RoomId } from "../game/openWorld";
+import { PhenomenonRooms } from "./phenomenonRooms";
+import { NODE_BY_ID } from "../game/phenomenaGraph";
 
 export type PresentationMode = "title" | "arrival" | "look" | "mark" | "distance";
 
@@ -59,6 +62,13 @@ export class GameWorld {
   private particles: ParticleSystem;
   private enemies: ShadowEnemy[] = [];
   private save: SaveGame;
+  private rooms!: PhenomenonRooms;
+  private stepper = createFixedStepper(1 / 60, 5 / 60);
+  private simulationWasPaused = true;
+  private simulationSteps = 0;
+  private droppedSeconds = 0;
+  private frameTimes: number[] = [];
+  private roomView: RoomId | null = null;
   private container: HTMLElement;
 
   private keys = new Set<string>();
@@ -263,7 +273,14 @@ export class GameWorld {
     } else if (presentation === null) {
       save.mode = "sailing";
     }
-    this.sailYaw = save.ship.heading;
+    const openWorld = ensureOpenWorld(save);
+    this.elapsed = openWorld.seconds;
+    this.sailYaw = openWorld.camera?.yaw ?? save.ship.heading;
+    this.sailPitch = openWorld.camera?.pitch ?? this.sailPitch;
+    this.sailDist = openWorld.camera?.distance ?? this.sailDist;
+    this.roomView = openWorld.camera?.room ?? null;
+    this.rooms = new PhenomenonRooms(this.scene);
+    this.rooms.update(openWorld, this.elapsed, (x, z, t) => this.water.heightAt(x, z, t));
 
     this.bindInput();
     this.unsubscribeStore = store.subscribe(this.syncProtection);
@@ -391,6 +408,7 @@ export class GameWorld {
     this.camera.lookAt(focus);
     const hour = 17;
     const palette = paletteFor(hour, 0);
+    this.water.setEnvironment(0, 0);
     this.sky.update(t, hour, 0, this.camera.position, focus);
     this.water.update(t, this.camera.position, 0, sunDirection(hour, new THREE.Vector3()), palette.sunColor, palette.zenith, palette.horizon, palette.night, this.scene.fog as THREE.Fog);
     this.presentationShip.sailDt(dt, t, { forward: 0, turn: 0, turbo: false }, 0, this.presentationParticles, (x, z) => this.water.heightAt(x, z, t));
@@ -449,6 +467,8 @@ export class GameWorld {
     this.updatePresentationEvidence();
   };
 
+  private releaseGameInput = () => { this.keys.clear(); };
+
   private onBlur = () => {
     store.set({ paused: true, protectionOpen: "pause" });
   };
@@ -466,6 +486,7 @@ export class GameWorld {
       return;
     }
     if (this.uiLock) return;
+    if (e.target instanceof Element && e.target.closest("input,textarea,select,[contenteditable=true],button")) return;
     this.keys.add(k);
     if (k === "e") this.tryInteract();
     if (k === "q") this.tryDodge();
@@ -542,6 +563,7 @@ export class GameWorld {
     window.addEventListener("wheel", this.onWheel);
     window.addEventListener("resize", this.onResize);
     window.addEventListener("blur", this.onBlur);
+    window.addEventListener("focusin", this.releaseGameInput);
     document.addEventListener("visibilitychange", this.onVisibilityChange);
   }
 
@@ -612,14 +634,6 @@ export class GameWorld {
         const cp = c.group.position;
         if (Math.hypot(p.x - cp.x, p.z - cp.z) < 17) {
           const phen = c.def;
-          if (islHere.id === "sturmherd" && !this.save.finalUnlocked) {
-            this.currentPrompt = {
-              key: "E",
-              text: "Das Auge bleibt verschlossen — zwölf Inseln warten noch",
-              action: () => store.toast("Der Sturmherd öffnet sich erst, wenn alle zwölf Phänomene überwunden sind.", "info"),
-            };
-            return;
-          }
           this.currentPrompt = {
             key: "E",
             text: `Begegnung: ${phen.name} — ${phen.epithet}`,
@@ -1000,7 +1014,6 @@ export class GameWorld {
     for (const isl of ISLANDS) {
       const st = this.save.islands.find((i) => i.id === isl.id);
       if (st?.overcome) continue;
-      if (isl.id === "sturmherd" && !this.save.finalUnlocked) continue;
       const d = (isl.x - px) ** 2 + (isl.z - pz) ** 2;
       if (d < bd) {
         bd = d;
@@ -1400,6 +1413,7 @@ export class GameWorld {
     this.save.ship = { x: this.ship.x, z: this.ship.z, heading: this.ship.heading };
     if (this.save.mode === "onfoot") this.save.playerPos = { x: this.player.pos.x, z: this.player.pos.z };
     this.save.timeOfDay = this.save.timeOfDay % 24;
+    ensureOpenWorld(this.save).camera = { yaw: this.sailYaw, pitch: this.sailPitch, distance: this.sailDist, room: this.roomView };
     // Unfinished dialogue payments stay provisional across save/reload or exit.
     return persistSave(this.duelEscrow > 0 ? { ...this.save, crystals: this.save.crystals + this.duelEscrow } : this.save);
   }
@@ -1409,26 +1423,51 @@ export class GameWorld {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     const rawDt = this.clock.getDelta();
-    const dt = Math.min(rawDt, 0.05);
+    const dt = Math.min(rawDt, 0.1);
     if (this.presentation !== null) {
-      if (this.presentationPaused()) {
-        this.updatePresentationEvidence();
-        return;
-      }
+      this.stepper.reset();
+      this.simulationWasPaused = true;
+      if (this.presentationPaused()) { this.updatePresentationEvidence(); return; }
       this.updateRenderBudget(rawDt, dt);
       this.renderPresentation(dt);
       return;
     }
-    if (this.uiLock) return;
-    const t = (this.elapsed += dt);
-
+    if (this.uiLock || document.hidden) {
+      this.stepper.reset();
+      this.simulationWasPaused = true;
+      return;
+    }
     this.updateRenderBudget(rawDt, dt);
+    if (this.simulationWasPaused) {
+      this.simulationWasPaused = false;
+      this.stepper.reset();
+    } else {
+      this.droppedSeconds += Math.max(0, rawDt - 5 / 60);
+      this.simulationSteps += this.stepper.advance(rawDt, dt => this.simulate(dt));
+      if (rawDt > 0) {
+        this.frameTimes.push(rawDt);
+        if (this.frameTimes.length > 1800) this.frameTimes.shift();
+      }
+    }
+    this.bloom.enabled = this.qualityLevel < 3;
+    const reflEvery = this.qualityLevel < 2 ? 2 : this.qualityLevel === 2 ? 4 : 0;
+    if (reflEvery > 0 && this.reflFrame++ % reflEvery === 0)
+      this.water.renderReflection(this.renderer, this.scene, this.camera);
+    this.composer.render();
+    this.presentationFrame++;
+    this.updatePresentationEvidence();
+  };
 
-    // Tageszeit & Wetter
-    this.save.timeOfDay = (this.save.timeOfDay + (dt / DAY_LENGTH_S) * 24) % 24;
-    const weatherNoise = fbm2(t * 0.008, 3.7, 2, 55) * 0.5 + 0.5;
-    this.storm = lerp(this.storm, clamp((weatherNoise - 0.55) * 2.4, 0, 1), dt * 0.3);
-    audio.setStormIntensity(this.storm);
+  private simulate(dt: number) {
+    const state = ensureOpenWorld(this.save);
+    stepOpenWorld(state, dt);
+    const t = this.elapsed = state.seconds;
+    this.save.timeOfDay = state.timeOfDay;
+    const localPosition = this.save.mode === "sailing" ? this.ship : this.player.pos;
+    const field = sampleFields(state, localPosition.x, localPosition.z);
+    this.storm = field.storm;
+    this.water.setEnvironment(this.storm, field.tide);
+    audio.setStormIntensity(this.storm, field.windSpeed, field.soundMask);
 
     // Fokus & Modi
     const sailing = this.save.mode === "sailing";
@@ -1445,6 +1484,7 @@ export class GameWorld {
         this.save.shipSpeedLevel,
         this.particles,
         (x, z) => this.water.heightAt(x, z, t),
+        field,
       );
       // Treibholz einsammeln
       const got = this.props.collectDriftwood(this.ship.x, this.ship.z, 7.5, this.elapsed);
@@ -1454,6 +1494,7 @@ export class GameWorld {
         audio.confirm();
         store.toast(`+${got} Treibholz`, "good");
       }
+      if (fwd || turn) this.roomView = null;
       this.updateSailCamera(dt);
     } else {
       const locked = this.uiLock;
@@ -1600,6 +1641,7 @@ export class GameWorld {
     const sunDir = sunDirection(this.save.timeOfDay, new THREE.Vector3());
     const pal = paletteFor(this.save.timeOfDay, this.storm);
     this.sky.update(t, this.save.timeOfDay, this.storm, this.camera.position, focus);
+    if (this.scene.fog instanceof THREE.Fog) this.scene.fog.far = field.visibility;
     this.water.update(
       t,
       this.camera.position,
@@ -1713,15 +1755,13 @@ export class GameWorld {
     }
 
     this.updateClouds(dt, focus);
-    this.bloom.enabled = this.qualityLevel < 3;
-    // Gestaffelte Reflexion: Stufe 0/1 jedes 2., Stufe 2 jedes 4. Frame.
-    const reflEvery = this.qualityLevel < 2 ? 2 : this.qualityLevel === 2 ? 4 : 0;
-    if (reflEvery > 0 && this.reflFrame++ % reflEvery === 0)
-      this.water.renderReflection(this.renderer, this.scene, this.camera);
-    this.composer.render();
-    this.presentationFrame++;
-    this.updatePresentationEvidence();
-  };
+    this.rooms.update(state, t, (x, z, time) => this.water.heightAt(x, z, time));
+    const nearby = [...ROOMS].sort((a,b) => Math.hypot(focus.x-a.x, focus.z-a.z) - Math.hypot(focus.x-b.x, focus.z-b.z)).find(room => Math.hypot(focus.x - room.x, focus.z - room.z) < 190)?.id ?? null;
+    if (state.activeRoom !== nearby) {
+      state.activeRoom = nearby;
+      store.set({ activeRoom: nearby, openWorldRevision: store.get().openWorldRevision + 1 });
+    }
+  }
 
   private createClouds() {
     const keys = ["cloudBig", "cloudSmall"] as const;
@@ -1818,6 +1858,14 @@ export class GameWorld {
   }
 
   private updateSailCamera(dt: number) {
+    if (this.roomView) {
+      const room = ROOMS.find(r => r.id === this.roomView)!;
+      const y = Math.max(2, terrainHeight(room.x, room.z) + 2);
+      const want = new THREE.Vector3(room.x + 28, y + 24, room.z + 48);
+      this.camera.position.lerp(want, 1 - Math.pow(0.001, dt));
+      this.camera.lookAt(room.x, y, room.z);
+      return;
+    }
     const cp = Math.cos(this.sailPitch);
     const sp = Math.sin(this.sailPitch);
     const want = new THREE.Vector3(
@@ -1849,6 +1897,78 @@ export class GameWorld {
     return this.saveNow();
   }
 
+  getOpenWorldState() { return ensureOpenWorld(this.save); }
+
+  travelToRoom(id: RoomId): void {
+    if (this.uiLock) return;
+    const room = ROOMS.find(r => r.id === id);
+    if (!room) return;
+    this.save.mode = "sailing";
+    this.player.group.visible = false;
+    this.ship.moored = false;
+    this.ship.speed = 0;
+    this.ship.setPose(room.arrivalX, room.arrivalZ, Math.atan2(room.arrivalX - room.x, room.arrivalZ - room.z));
+    this.roomView = id;
+    this.getOpenWorldState().activeRoom = id;
+    this.updateSailCamera(1);
+    store.set({ mode: "sailing", activeRoom: id, openWorldRevision: store.get().openWorldRevision + 1 });
+    this.persist();
+  }
+
+  actInRoom(room: RoomId, action: string): string {
+    if (this.uiLock) return "Die Welt ist gerade angehalten.";
+    if (!action.startsWith("weather:") && !action.startsWith("time:") && this.getOpenWorldState().activeRoom !== room) return "Fahre zuerst zu diesem Ort.";
+    const result = applyWorldAction(this.getOpenWorldState(), room, action);
+    this.rooms.update(this.getOpenWorldState(), this.elapsed, (x,z,t) => this.water.heightAt(x,z,t));
+    store.set({ openWorldRevision: store.get().openWorldRevision + 1 });
+    this.persist();
+    return result;
+  }
+
+  recordObservation(room: RoomId, interpretation?: string, question?: string): string {
+    if (this.uiLock || this.getOpenWorldState().activeRoom !== room) return "";
+    const id = addObservation(this.getOpenWorldState(), room, interpretation, question);
+    this.persist();
+    store.set({ openWorldRevision: store.get().openWorldRevision + 1 });
+    return id;
+  }
+
+  reviseObservation(id: string, text: string): void {
+    if (this.uiLock) return;
+    reviseObservation(this.getOpenWorldState(), id, text);
+    this.persist();
+    store.set({ openWorldRevision: store.get().openWorldRevision + 1 });
+  }
+
+  exportSave(): string {
+    this.checkpoint(); // Export also preserves the in-memory state if local storage is blocked.
+    return JSON.stringify(this.save, null, 2);
+  }
+
+  getDiagnostics() {
+    const sorted = [...this.frameTimes].sort((a,b) => a-b);
+    const sum = this.frameTimes.reduce((a,b) => a+b, 0);
+    const size = this.renderer.getSize(new THREE.Vector2());
+    return { samples: sorted.length, windowSeconds: sum, meanFps: sum ? sorted.length / sum : 0,
+      p95FrameMs: (sorted[Math.max(0, Math.ceil(sorted.length * .95) - 1)] ?? 0) * 1000,
+      framesOver33ms: sorted.filter(t => t > .033).length,
+      quality: this.qualityLevel, pixelRatio: this.renderer.getPixelRatio(), resolution: `${size.x} × ${size.y}`,
+      steps: this.simulationSteps, droppedSeconds: this.droppedSeconds,
+      geometries: this.renderer.info.memory.geometries, textures: this.renderer.info.memory.textures,
+      calls: this.renderer.info.render.calls };
+  }
+
+  /** Kompatibilität mit vorhandener optionaler Strandbegegnung. */
+  completeStrandEncounter(nodeId: string) {
+    const node = NODE_BY_ID.get(nodeId);
+    if (!node) return;
+    if (!this.save.graph.met.includes(nodeId)) this.save.graph.met.push(nodeId);
+    if (!this.save.graph.understood.includes(nodeId)) this.save.graph.understood.push(nodeId);
+    this.persist();
+    store.set({ encounterId: null });
+    store.toast(`Begegnung mit ${node.name} im Register bewahrt.`);
+  }
+
   get canvasElement() {
     return this.renderer.domElement;
   }
@@ -1870,6 +1990,7 @@ export class GameWorld {
     window.removeEventListener("wheel", this.onWheel);
     window.removeEventListener("resize", this.onResize);
     window.removeEventListener("blur", this.onBlur);
+    window.removeEventListener("focusin", this.releaseGameInput);
     document.removeEventListener("visibilitychange", this.onVisibilityChange);
     for (const object of this.presentationObjects) {
       this.scene.remove(object);

@@ -10,8 +10,9 @@ import { CookOverlay } from "./ui/CookOverlay";
 import { DuelOverlay } from "./ui/DuelOverlay";
 import { Protection } from "./ui/Protection";
 import { GentleEncounter } from "./ui/GentleEncounter";
+import { OpenWorldPanel } from "./ui/OpenWorldPanel";
 import { SurfaceBoundary } from "./ui/SurfaceBoundary";
-import { loadSave, newGame, persistSave, hasUnreadableSave, type SaveGame } from "./game/state";
+import { loadSave, newGame, persistSave, parseImportedSave, hasUnreadableSave, type SaveGame } from "./game/state";
 import { startWorld, stopWorld, getWorld } from "./game/runtime";
 import { store, initialHud } from "./game/store";
 import { audio } from "./game/audio";
@@ -23,7 +24,8 @@ export default function App() {
   const [entry] = useState(() => {
     const saved = loadSave();
     const requested = new URLSearchParams(location.search).get("encounter") === "flimmerbucht-r1";
-    return { saved, encounter: requested && !hasUnreadableSave() ? saved || newGame() : null };
+    const resume = requested && Boolean(saved?.openWorld) && !hasUnreadableSave();
+    return { saved, resume, encounter: requested && !resume && !hasUnreadableSave() ? saved || newGame() : null };
   });
   const [phase, setPhase] = useState<Phase>("title");
   const [hasSave, setHasSave] = useState(Boolean(entry.encounter || entry.saved));
@@ -35,6 +37,7 @@ export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const saveRef = useRef<SaveGame | null>(entry.encounter || entry.saved);
   const previewRef = useRef<SaveGame>(entry.encounter || entry.saved || newGame());
+  const resumeEntryRef = useRef(entry.resume);
   const generation = useRef(0);
   const h = useSyncExternalStore(cb => store.subscribe(cb), () => store.get());
   const presentEncounter = useCallback((mode: Parameters<NonNullable<ReturnType<typeof getWorld>>["setPresentation"]>[0]) => getWorld()?.setPresentation(mode), []);
@@ -52,10 +55,13 @@ export default function App() {
     const container = containerRef.current;
     if (!container) return;
     let active = true;
-    void startWorld(container, saveRef.current || previewRef.current, entry.encounter ? "arrival" : "title").then(world => {
+    const resume = resumeEntryRef.current;
+    void startWorld(container, saveRef.current || previewRef.current, resume ? null : entry.encounter ? "arrival" : "title").then(world => {
       if (!active) return;
       const encounter = store.get().explorationOpen;
-      world.setPresentation(encounter ? (saveRef.current?.gentleEncounter?.choice || "arrival") : "title");
+      world.setPresentation(encounter ? (saveRef.current?.gentleEncounter?.choice || "arrival") : resume ? null : "title");
+      resumeEntryRef.current = false;
+      if (resume) { store.set({ mode: world.saveMode(), paused: false, protectionOpen: null }); setPhase("game"); }
       setSceneReady(true);
     }).catch((error: unknown) => {
       if (!active || (error instanceof Error && error.name === "AbortError")) return;
@@ -107,7 +113,14 @@ export default function App() {
     if (world) return world.checkpoint();
     return saveRef.current ? persistSave(saveRef.current) : true;
   };
+  const importSave = (raw: string) => {
+    if (!checkpoint()) throw new Error("Der aktuelle Spielstand konnte nicht gesichert werden. Der Import bleibt geschlossen; dein vorhandener Stand bleibt erhalten.");
+    const imported = parseImportedSave(raw);
+    if (!persistSave(imported)) throw new Error("Der Spielstand konnte nicht übernommen werden. Prüfe den Speicherhinweis in der Schutzleiste.");
+    begin(imported);
+  };
   const exit = () => {
+    resumeEntryRef.current = false;
     if (saveRef.current) saveRef.current = getWorld()?.getSave() || saveRef.current;
     checkpoint();
     generation.current++;
@@ -144,7 +157,7 @@ export default function App() {
       <SurfaceBoundary key={surfaceEpoch}><div className={`game-surfaces ${h.paused || h.protectionOpen ? "surface-paused" : ""}`} inert={Boolean(h.paused || h.protectionOpen || h.explorationOpen)}>
         {(!sceneReady || phase === "loading") && phase !== "error" && <p className="scene-loading" role="status">Die See wird bereitet …</p>}
         {phase === "error" && <div className="load-error"><h1>Die Spielwelt bleibt geschlossen</h1><p role="alert">{loadError}</p><button onClick={() => setPhase("title")}>Zum Einstieg</button></div>}
-        {phase === "game" && !h.explorationOpen && <><HUD /><BattleOverlay /><DialogOverlay /><JournalOverlay /><LoreOverlay /><ChatOverlay /><CookOverlay /><DuelOverlay /></>}
+        {phase === "game" && !h.explorationOpen && <><HUD /><OpenWorldPanel checkpoint={checkpoint} onImport={importSave} /><BattleOverlay /><DialogOverlay /><JournalOverlay /><LoreOverlay /><ChatOverlay /><CookOverlay /><DuelOverlay /></>}
         {phase === "title" && !h.explorationOpen && <TitleScreen ready={sceneReady} hasSave={hasSave} onEncounter={openEncounter} onNew={() => begin(newGame())} onContinue={() => { const s = saveRef.current || loadSave(); if (s) begin(s); }} />}
       </div></SurfaceBoundary>
       {h.explorationOpen && encounterSave && <SurfaceBoundary><GentleEncounter save={encounterSave} checkpoint={checkpoint} onScene={presentEncounter} onChange={next => { if (saveRef.current) { saveRef.current.gentleEncounter = next; persistSave(saveRef.current); } }} onClose={() => { checkpoint(); getWorld()?.setPresentation(phase === "game" ? null : "title"); store.set({ explorationOpen: false, paused: true, protectionOpen: "pause" }); }} onRetreat={retreat} /></SurfaceBoundary>}

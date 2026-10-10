@@ -12,6 +12,7 @@ import { clamp } from "../game/noise";
 
 const WATER_VERT = /* glsl */ `
 uniform float uTime;
+uniform float uTide;
 uniform mat4 uTextureMatrix;
 ${WAVES_GLSL}
 varying vec3 vWorld;
@@ -22,6 +23,7 @@ void main() {
   vec2 p = (modelMatrix * vec4(position, 1.0)).xz;
   vec3 nrm; float crest;
   vec3 disp = gerstner(p, uTime, nrm, crest);
+  disp.y += uTide;
   vWorld = vec3(disp.x, disp.y, disp.z);
   vNormal = nrm;
   vCrest = crest;
@@ -258,10 +260,10 @@ const _target = new THREE.Vector3();
 const _bias = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
 
 /** Spiegelt die Kamera an der Ebene y=0 und setzt den obliquen Near-Clip. */
-function updateMirrorCam(src: THREE.Camera, mirror: THREE.PerspectiveCamera, texMatrix: THREE.Matrix4) {
+function updateMirrorCam(src: THREE.Camera, mirror: THREE.PerspectiveCamera, texMatrix: THREE.Matrix4, tide: number) {
   _look.set(0, 0, -1).applyQuaternion(src.quaternion);
   _up.set(0, 1, 0).applyQuaternion(src.quaternion);
-  mirror.position.set(src.position.x, -src.position.y, src.position.z);
+  mirror.position.set(src.position.x, 2 * tide - src.position.y, src.position.z);
   _look.y *= -1;
   _up.y *= -1;
   _target.copy(mirror.position).add(_look);
@@ -272,7 +274,7 @@ function updateMirrorCam(src: THREE.Camera, mirror: THREE.PerspectiveCamera, tex
   const srcP = (src as THREE.PerspectiveCamera).projectionMatrix;
   mirror.projectionMatrix.copy(srcP);
 
-  _plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 0));
+  _plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, tide, 0));
   _plane.applyMatrix4(mirror.matrixWorldInverse);
   _clip.set(_plane.normal.x, _plane.normal.y, _plane.normal.z, _plane.constant);
   const pm = mirror.projectionMatrix.elements;
@@ -327,6 +329,7 @@ export class Water {
       uniforms: {
         uTime: { value: 0 },
         uStormAmp: { value: 1 },
+        uTide: { value: 0 },
         uNormals: { value: makeNormalTexture(256) },
         uTerrain: { value: makeTerrainTexture(1024) },
         tReflect: { value: this.reflRT.texture },
@@ -384,7 +387,7 @@ export class Water {
       return;
     }
     u.uReflOn.value = 1;
-    updateMirrorCam(camera, this.mirrorCam, this.texMatrix);
+    updateMirrorCam(camera, this.mirrorCam, this.texMatrix, this.tide);
     this.mesh.visible = false;
     const prevRT = renderer.getRenderTarget();
     const prevTone = renderer.toneMapping;
@@ -412,7 +415,7 @@ export class Water {
     const gx = Math.round(center.x / 8) * 8;
     const gz = Math.round(center.z / 8) * 8;
     this.mesh.position.set(gx, 0, gz);
-    this.stormAmp = 0.75 + storm * 1.5;
+    this.setEnvironment(storm, this.tide);
     const u = this.mat.uniforms;
     u.uTime.value = t;
     u.uStormAmp.value = this.stormAmp;
@@ -429,6 +432,16 @@ export class Water {
 
   /** CPU-Wellenhöhe (Schiff, Bojen) */
   heightAt(x: number, z: number, t: number): number {
-    return waveHeight(x, z, t, this.stormAmp);
+    return waveHeight(x, z, t, this.stormAmp) + this.tide;
+  }
+
+  private tide = 0;
+
+  /** Vor Rumpf-/Bojenabtastung und Rendern denselben Zustand setzen. */
+  setEnvironment(storm: number, tide = 0) {
+    this.tide = tide;
+    this.stormAmp = 0.75 + storm * 1.5;
+    this.mat.uniforms.uStormAmp.value = this.stormAmp;
+    this.mat.uniforms.uTide.value = tide;
   }
 }
