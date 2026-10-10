@@ -14,22 +14,21 @@ import { Beacon } from "./beacon";
 import { ParticleSystem } from "./particles";
 import { clamp, lerp, mulberry32, fbm2 } from "../game/noise";
 import { HARBOR, ISLANDS, islandAt, terrainHeight, terrainSlope } from "../game/worldLayout";
-import { persistSave, grantXp, checkFinalUnlock, type SaveGame, type PlayerState } from "../game/state";
+import { persistSave, grantXp, checkFinalUnlock, hasUnreadableSave, type SaveGame, type PlayerState } from "../game/state";
 import { Npcs } from "./npcs";
 import { Loot } from "./loot";
 import { Structures, buildFloss, buildLeiter, buildBruecke, buildVentilator, buildAufzug, clampSpan } from "./structures";
 import { BUILDABLES, missingMaterials, matName, matCostText, type BuildableDef } from "../game/materials";
 import { LoreStones } from "./lorestones";
 import { Creature } from "./creature";
-import { Wisps } from "./wisps";
 import { CliffWalls } from "./cliffwalls";
 import { CLIMB_WALLS, cliffTopAt } from "../game/climb";
 import { computeDish, mealsToActive, mealBonus, pruneMeals, ingById, type DishResult } from "../game/cooking";
 import { shrinePoint } from "../game/worldLayout";
 import { PHENOMENA } from "../game/data";
-import { NODE_BY_ID, revealedByUnderstanding, fogStateOf } from "../game/phenomenaGraph";
 import { audio } from "../game/audio";
 import { store } from "../game/store";
+import { isProtectionPaused } from "../game/pause";
 import { preloadAll, extractMerged, getModel, setShadows } from "./assets";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
@@ -37,6 +36,15 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 const DAY_LENGTH_S = 1080; // 18 Minuten = 1 Spieltag
+
+export type PresentationMode = "title" | "arrival" | "look" | "mark" | "distance";
+
+interface PresentationSnapshot {
+  cameraPosition: THREE.Vector3;
+  cameraQuaternion: THREE.Quaternion;
+  visibility: { object: THREE.Object3D; visible: boolean }[];
+  cloudPositions: THREE.Vector3[];
+}
 
 export class GameWorld {
   private renderer: THREE.WebGLRenderer;
@@ -58,6 +66,10 @@ export class GameWorld {
   private raf = 0;
   private elapsed = 0;
   private disposed = false;
+  private unsubscribeStore: (() => void) | null = null;
+  private frozenAt: number | null = null;
+  private attackTimer: number | null = null;
+  private duelEscrow = 0;
 
   // Segel-Kamera
   private sailYaw = 0;
@@ -70,9 +82,21 @@ export class GameWorld {
   private hudTimer = 0;
   private saveTimer = 0;
   private fpsEma = 60;
-  private qualityLevel = 0; // 0 = voll, 1 = PR 1.25, 2 = PR 1 + Wasser lo, 3 = Schatten aus
+  private qualityLevel = 0; // 0 = voll, 1 = PR 1.25, 2 = PR 1 + Wasser lo, 3 = kleinere Schatten
   private reflFrame = 0; // Zähler für 30-Hz-Spiegelpass
   private qualityTimer = 0;
+  private presentation: PresentationMode | null = null;
+  private presentationSnapshot: PresentationSnapshot | null = null;
+  private presentationShip: Ship | null = null;
+  private presentationParticles: ParticleSystem | null = null;
+  private presentationObjects: THREE.Object3D[] = [];
+  private shipObjects: THREE.Object3D[] = [];
+  private presentationBuoy: THREE.Group | null = null;
+  private presentationSails: { node: THREE.Object3D; rotation: THREE.Euler }[] = [];
+  private presentationElapsed = 0;
+  private presentationFrame = 0;
+  private presentationFps = 60;
+  private readonly presentationMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   // Kampf
   private attackCooldown = 0;
@@ -83,7 +107,6 @@ export class GameWorld {
   private npcs!: Npcs;
   private loreStones!: LoreStones;
   private creatures = new Map<string, Creature>();
-  private wisps!: Wisps; // Strandläufer (M4)
   private echoOrb: THREE.Mesh | null = null;
   private loot!: Loot;
   private structures!: Structures;
@@ -98,12 +121,13 @@ export class GameWorld {
 
   onReady: (() => void) | null = null;
 
-  static async create(container: HTMLElement, save: SaveGame): Promise<GameWorld> {
+  static async create(container: HTMLElement, save: SaveGame, isCurrent: () => boolean = () => true, presentation: PresentationMode | null = null): Promise<GameWorld> {
     await preloadAll();
-    return new GameWorld(container, save);
+    if (!isCurrent()) throw new DOMException("World loading cancelled", "AbortError");
+    return new GameWorld(container, save, presentation);
   }
 
-  constructor(container: HTMLElement, save: SaveGame) {
+  constructor(container: HTMLElement, save: SaveGame, presentation: PresentationMode | null = null) {
     this.container = container;
     this.save = save;
 
@@ -136,7 +160,9 @@ export class GameWorld {
     new CliffWalls(this.scene); // Kletterwände (Moosfelsen) in die Szene hängen
     new Terrain(this.scene);
     this.props = new Props(this.scene);
+    const beforeShip = new Set(this.scene.children);
     this.ship = new Ship(this.scene);
+    this.shipObjects = this.scene.children.filter((object) => !beforeShip.has(object));
     this.player = new Player(this.scene);
     this.beacon = new Beacon(this.scene);
     this.particles = new ParticleSystem(this.scene);
@@ -162,9 +188,6 @@ export class GameWorld {
 
     // Lore-Runensteine
     this.loreStones = new LoreStones(this.scene, save.echoesFound);
-
-    // Strandläufer (M4): sechs Strand-Begegnungen auf Alarm-Atoll & Glaswelt
-    this.wisps = new Wisps(this.scene, save.graph);
 
     // Sammelbare Materialien + gebaute Strukturen
     this.loot = new Loot(this.scene, save.lootTaken);
@@ -237,18 +260,21 @@ export class GameWorld {
       this.player.place(save.playerPos.x, y, save.playerPos.z, Math.PI);
       this.player.group.visible = true;
       this.ship.moored = true;
-    } else {
+    } else if (presentation === null) {
       save.mode = "sailing";
     }
     this.sailYaw = save.ship.heading;
 
     this.bindInput();
+    this.unsubscribeStore = store.subscribe(this.syncProtection);
     store.set({ mode: save.mode === "onfoot" ? "onfoot" : "sailing" });
 
     // Start-Kamera
     if (this.save.mode === "sailing") this.snapSailCamera();
     else this.player.snapCamera(this.camera, (x, z) => this.groundAt(x, z));
 
+    if (presentation !== null) this.setPresentation(presentation);
+    else this.composer.render();
     this.loop();
     if (this.onReady) this.onReady();
   }
@@ -265,13 +291,181 @@ export class GameWorld {
 
   get uiLock(): boolean {
     const st = store.get();
-    return !!(st.menuOpen || st.dead || st.dialogNpc || st.battlePhen || st.encounterId || st.journalOpen || st.loreStone || st.chatOpen || st.cookOpen || st.duelId);
+    return !!(this.presentation !== null || isProtectionPaused(st) || st.dead || st.dialogNpc || st.battlePhen || st.journalOpen || st.loreStone || st.chatOpen || st.cookOpen || st.duelId);
   }
+
+  /** Ruhige Darstellung derselben Welt; die Spielsimulation bleibt eingefroren. */
+  setPresentation(mode: PresentationMode | null): void {
+    if (this.disposed || mode === this.presentation) return;
+    const entering = mode !== null && this.presentationSnapshot === null;
+    if (mode !== null && this.presentationSnapshot === null) {
+      this.presentationSnapshot = {
+        cameraPosition: this.camera.position.clone(),
+        cameraQuaternion: this.camera.quaternion.clone(),
+        visibility: [...this.shipObjects, this.player.group].map((object) => ({ object, visible: object.visible })),
+        cloudPositions: this.clouds.map(({ mesh }) => mesh.position.clone()),
+      };
+      for (const { object } of this.presentationSnapshot.visibility) object.visible = false;
+      this.createPresentationObjects();
+      for (const object of this.presentationObjects) object.visible = object !== this.presentationBuoy;
+      this.presentationElapsed = this.elapsed;
+      this.releaseInput();
+    }
+    this.presentation = mode;
+    if (mode === null && this.presentationSnapshot !== null) {
+      const snapshot = this.presentationSnapshot;
+      this.camera.position.copy(snapshot.cameraPosition);
+      this.camera.quaternion.copy(snapshot.cameraQuaternion);
+      for (const { object, visible } of snapshot.visibility) object.visible = visible;
+      this.clouds.forEach(({ mesh }, i) => mesh.position.copy(snapshot.cloudPositions[i]));
+      for (const object of this.presentationObjects) object.visible = false;
+      this.presentationSnapshot = null;
+    }
+    this.syncProtection();
+    this.updatePresentationEvidence();
+    if (entering && !this.presentationPaused()) this.renderPresentation(0, true);
+  }
+
+  private presentationPaused(): boolean {
+    const state = store.get();
+    return state.paused || state.protectionOpen !== null || document.hidden;
+  }
+
+  private updatePresentationEvidence(): void {
+    const data = this.renderer.domElement.dataset;
+    data.presentationMode = this.presentation ?? "game";
+    data.presentationStatus = this.presentation !== null ? (this.presentationPaused() ? "paused" : "running") : (this.uiLock ? "paused" : "game");
+    data.presentationFrame = String(this.presentationFrame);
+    data.presentationFps = this.presentationFps.toFixed(1);
+    data.presentationMotion = this.presentationMotion.matches ? "reduced" : "full";
+    data.presentationMarked = String(this.presentation !== null && this.presentationBuoy?.visible === true);
+  }
+
+  private createPresentationObjects(): void {
+    if (this.presentationShip !== null) return;
+    const previous = new Set(this.scene.children);
+    this.presentationShip = new Ship(this.scene);
+    this.presentationParticles = new ParticleSystem(this.scene);
+    const dock = this.props.dock;
+    this.presentationShip.setPose(dock.x + 13, dock.z + dock.len + 15, Math.PI * 0.72);
+    this.presentationShip.moored = true;
+    this.presentationShip.group.traverse((node) => {
+      if (["BackSail", "Front_Sail", "MidleSail"].includes(node.name))
+        this.presentationSails.push({ node, rotation: node.rotation.clone() });
+    });
+    const buoy = new THREE.Group();
+    const float = new THREE.Mesh(new THREE.SphereGeometry(0.65, 20, 12), new THREE.MeshStandardMaterial({ color: 0xdc9f56, roughness: 0.55 }));
+    float.scale.set(1, 0.7, 1);
+    float.castShadow = true;
+    buoy.add(float);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 1.6, 8), new THREE.MeshStandardMaterial({ color: 0xe8ded0, roughness: 0.7 }));
+    mast.position.y = 0.9;
+    mast.castShadow = true;
+    buoy.add(mast);
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.36, 6, 1), new THREE.MeshStandardMaterial({ color: 0xe7c689, roughness: 0.9, side: THREE.DoubleSide }));
+    flag.position.set(0.37, 1.55, 0);
+    flag.castShadow = true;
+    buoy.add(flag);
+    buoy.position.set(dock.x + 3.5, 0, dock.z + dock.len + 9);
+    this.scene.add(buoy);
+    buoy.visible = false;
+    this.presentationBuoy = buoy;
+    this.presentationObjects = this.scene.children.filter((object) => !previous.has(object));
+  }
+
+  private renderPresentation(dt: number, snap = false): void {
+    if (this.presentation === null || this.presentationShip === null || this.presentationParticles === null) return;
+    const reducedMotion = this.presentationMotion.matches;
+    if (reducedMotion) dt = 0;
+    const t = (this.presentationElapsed += dt);
+    const dock = this.props.dock;
+    const distant = this.presentation === "distance";
+    const close = this.presentation === "look" || this.presentation === "mark";
+    const focus = new THREE.Vector3(dock.x + 7, 2.1, dock.z + dock.len + 13);
+    const cameraPosition = new THREE.Vector3(
+      dock.x - (distant ? 14 : close ? 5.5 : 10) + Math.sin(t * 0.055) * 0.45,
+      distant ? 7.5 : close ? 3.9 : 5.2,
+      dock.z + (distant ? 0 : close ? 17 : 9) + Math.cos(t * 0.045) * 0.4,
+    );
+    this.camera.position.lerp(cameraPosition, snap || reducedMotion ? 1 : 1 - Math.exp(-dt * 1.2));
+    this.camera.lookAt(focus);
+    const hour = 17;
+    const palette = paletteFor(hour, 0);
+    this.sky.update(t, hour, 0, this.camera.position, focus);
+    this.water.update(t, this.camera.position, 0, sunDirection(hour, new THREE.Vector3()), palette.sunColor, palette.zenith, palette.horizon, palette.night, this.scene.fog as THREE.Fog);
+    this.presentationShip.sailDt(dt, t, { forward: 0, turn: 0, turbo: false }, 0, this.presentationParticles, (x, z) => this.water.heightAt(x, z, t));
+    for (const { node, rotation } of this.presentationSails) {
+      node.scale.set(0.85, 0.56, 1);
+      node.rotation.z = rotation.z + Math.sin(t * 0.8 + node.position.y) * 0.022;
+    }
+    if (this.presentationBuoy !== null) {
+      const buoy = this.presentationBuoy;
+      buoy.visible = this.presentation === "mark";
+      buoy.position.y = this.water.heightAt(buoy.position.x, buoy.position.z, t) * 0.85 + 0.35;
+      buoy.rotation.set(Math.sin(t * 0.7) * 0.06, 0, Math.cos(t * 0.55) * 0.07);
+    }
+    this.presentationParticles.update(dt);
+    this.updateClouds(dt * 0.35, focus);
+    this.bloom.enabled = this.qualityLevel < 3;
+    const reflEvery = this.qualityLevel < 2 ? 2 : this.qualityLevel === 2 ? 4 : 0;
+    if (reflEvery > 0 && this.reflFrame++ % reflEvery === 0)
+      this.water.renderReflection(this.renderer, this.scene, this.camera);
+    this.composer.render();
+    this.presentationFrame++;
+    this.updatePresentationEvidence();
+  }
+
+  private releaseInput() {
+    this.keys.clear();
+    if (this.attackTimer !== null) window.clearTimeout(this.attackTimer);
+    this.attackTimer = null;
+    if (document.pointerLockElement === this.renderer.domElement) document.exitPointerLock();
+  }
+
+  private extendFrozenDurations() {
+    if (this.frozenAt === null) return;
+    const frozenMs = Math.max(0, Date.now() - this.frozenAt);
+    if (this.fireBuffUntil > performance.now() - frozenMs) this.fireBuffUntil += frozenMs;
+    for (const meal of this.save.activeMeals) {
+      meal.expiresAt += frozenMs;
+      if (meal.crashAt !== undefined) meal.crashAt += frozenMs;
+      if (meal.crashExpiresAt !== undefined) meal.crashExpiresAt += frozenMs;
+    }
+    this.frozenAt = Date.now();
+  }
+
+  private syncProtection = () => {
+    if (this.disposed) return;
+    if (this.uiLock) {
+      if (this.frozenAt === null) {
+        this.frozenAt = Date.now();
+        this.releaseInput();
+      }
+    } else if (this.frozenAt !== null) {
+      this.extendFrozenDurations();
+      this.frozenAt = null;
+    }
+    audio.setPaused(this.presentation !== null || isProtectionPaused());
+    this.updatePresentationEvidence();
+  };
+
+  private onBlur = () => {
+    store.set({ paused: true, protectionOpen: "pause" });
+  };
+  private onVisibilityChange = () => {
+    if (document.hidden) this.onBlur();
+  };
 
   // ── Eingaben ─────────────────────────────────────────────────────
   private onKeyDown = (e: KeyboardEvent) => {
     if (e.repeat) return;
     const k = e.key.toLowerCase();
+    if (k === "escape") {
+      e.preventDefault();
+      store.set({ paused: true, protectionOpen: "pause" });
+      return;
+    }
+    if (this.uiLock) return;
     this.keys.add(k);
     if (k === "e") this.tryInteract();
     if (k === "q") this.tryDodge();
@@ -291,26 +485,12 @@ export class GameWorld {
       store.set({ journalOpen: true });
       if (document.pointerLockElement) document.exitPointerLock();
     }
-    if (k === "escape") {
-      const st = store.get();
-      if (this.buildSession) {
-        this.cancelBuild();
-      } else if (st.chatOpen) {
-        store.set({ chatOpen: false });
-      } else if (st.cookOpen) {
-        store.set({ cookOpen: false });
-      } else if (st.journalOpen || st.dialogNpc || st.loreStone || st.encounterId) {
-        store.set({ journalOpen: false, dialogNpc: null, loreStone: null, encounterId: null });
-      } else if (!st.battlePhen && !st.duelId) {
-        store.set({ menuOpen: !st.menuOpen });
-      }
-    }
     if (k === "k") this.tryCookOpen();
   };
   private onKeyUp = (e: KeyboardEvent) => this.keys.delete(e.key.toLowerCase());
 
   private onMouseMove = (e: MouseEvent) => {
-    if (document.pointerLockElement !== this.renderer.domElement) return;
+    if (this.uiLock || document.pointerLockElement !== this.renderer.domElement) return;
     const dx = e.movementX * 0.0026;
     const dy = e.movementY * 0.0022;
     if (this.save.mode === "onfoot") {
@@ -323,7 +503,7 @@ export class GameWorld {
   };
 
   private onMouseDown = (e: MouseEvent) => {
-    if (store.get().menuOpen || store.get().dead) return;
+    if (this.uiLock || e.target !== this.renderer.domElement) return;
     if (document.pointerLockElement !== this.renderer.domElement) {
       try {
         const r = this.renderer.domElement.requestPointerLock() as unknown;
@@ -338,6 +518,7 @@ export class GameWorld {
   };
 
   private onWheel = (e: WheelEvent) => {
+    if (this.uiLock) return;
     const d = Math.sign(e.deltaY) * 1.4;
     if (this.save.mode === "onfoot") this.player.camDist = clamp(this.player.camDist + d, 4.5, 13);
     else this.sailDist = clamp(this.sailDist + d * 1.6, 10, 30);
@@ -360,6 +541,8 @@ export class GameWorld {
     window.addEventListener("mousedown", this.onMouseDown);
     window.addEventListener("wheel", this.onWheel);
     window.addEventListener("resize", this.onResize);
+    window.addEventListener("blur", this.onBlur);
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
   }
 
   // ── Interaktionen ────────────────────────────────────────────────
@@ -465,17 +648,6 @@ export class GameWorld {
         key: "E",
         text: "Runenstein berühren",
         action: () => this.readStone(stone.line.id),
-      };
-      return;
-    }
-
-    // Strand-Begegnung (M4): kleine Phänomen-Gestalten am Strand
-    const wisp = this.wisps.nearest(p.x, p.z, 3.4);
-    if (wisp) {
-      this.currentPrompt = {
-        key: "E",
-        text: `Strand-Begegnung: ${wisp.node.name} — ${wisp.node.epithet}`,
-        action: () => this.openEncounter(wisp.node.id),
       };
       return;
     }
@@ -675,13 +847,14 @@ export class GameWorld {
   }
 
   private tryAttack() {
-    if (this.save.mode !== "onfoot" || this.attackCooldown > 0 || this.uiLock) return;
+    if (this.save.mode !== "onfoot" || this.attackCooldown > 0 || this.uiLock || !store.get().combatEnabled) return;
     this.attackCooldown = 0.42;
     this.player.swing();
     audio.select();
     // Trefferprüfung nach kurzer Verzögerung (Schwung)
-    window.setTimeout(() => {
-      if (this.disposed || this.save.mode !== "onfoot") return;
+    this.attackTimer = window.setTimeout(() => {
+      this.attackTimer = null;
+      if (this.disposed || this.uiLock || !store.get().combatEnabled || this.save.mode !== "onfoot") return;
       const p = this.player.pos;
       const fx = Math.sin(this.player.facing);
       const fz = Math.cos(this.player.facing);
@@ -783,7 +956,6 @@ export class GameWorld {
   }
 
   private playerDied() {
-    this.dropEcho();
     store.set({ dead: true });
     audio.defeat();
     if (document.pointerLockElement) document.exitPointerLock();
@@ -846,6 +1018,12 @@ export class GameWorld {
 
   // ── Begegnungen, Dialoge, Lore, Echo ────────────────────────────
   startEncounter(islandId: string) {
+    if (this.uiLock) return;
+    if (!store.get().combatEnabled) {
+      if (hasUnreadableSave()) { store.set({ paused: true, protectionOpen: "pause" }); return; }
+      store.set({ explorationOpen: true });
+      return;
+    }
     const c = this.creatures.get(islandId);
     if (!c || c.dead) return;
     c.lookAt(this.player.pos.clone());
@@ -856,6 +1034,7 @@ export class GameWorld {
   }
 
   creatureHook(action: "hit" | "attack" | "dissolve", peace?: number) {
+    if (isProtectionPaused()) return;
     const id = store.get().battlePhen;
     if (!id) return;
     const c = this.creatures.get(id);
@@ -867,7 +1046,12 @@ export class GameWorld {
   }
 
   endEncounter(outcome: "win" | "peace" | "flee" | "defeat", phenId: string, player: PlayerState) {
-    this.save.player = player;
+    if (isProtectionPaused() || store.get().battlePhen !== phenId) return;
+    if (outcome === "flee") {
+      this.retreatEncounter();
+      return;
+    }
+    if (outcome === "win" || outcome === "peace") this.save.player = player;
     const c = this.creatures.get(phenId);
     const stIsl = this.save.islands.find((i) => i.id === phenId);
     const phen = PHENOMENA.find((pp) => pp.id === phenId);
@@ -894,46 +1078,26 @@ export class GameWorld {
         }
       }
     } else if (outcome === "defeat") {
-      this.dropEcho();
       this.respawn();
     }
     store.set({ battlePhen: null });
     this.persist();
   }
 
-  // ── Strand-Begegnungen (M4) ──────────────────────────────────────
-  /** Begegnung öffnen: als „begegnet“ vermerken, Overlay zeigen */
-  openEncounter(nodeId: string) {
-    if (!NODE_BY_ID.has(nodeId)) return;
-    if (!this.save.graph.met.includes(nodeId)) this.save.graph.met.push(nodeId);
-    if (document.pointerLockElement) document.exitPointerLock();
-    audio.select();
-    store.set({ encounterId: nodeId });
-    this.persist();
-  }
-
-  /** Begegnung abschließen: begriffen — Register, Einsicht, Nebel-Reveal */
-  completeStrandEncounter(nodeId: string) {
-    const node = NODE_BY_ID.get(nodeId);
-    if (!node) {
-      store.set({ encounterId: null });
-      return;
-    }
-    if (!this.save.graph.understood.includes(nodeId)) {
-      // Reveal vor dem Eintragen berechnen (Vorher-Nebelstand)
-      const revealed = revealedByUnderstanding(nodeId, this.save.graph);
-      this.save.graph.understood.push(nodeId);
-      grantXp(this.save.player, 8);
-      const names = revealed.map((id) => NODE_BY_ID.get(id)?.name ?? id).slice(0, 3);
-      store.toast(node.text.insight, "good");
-      if (names.length > 0) {
-        store.toast(`Aus dem Nebel taucht: ${names.join(", ")} …`, "info");
-      }
-      audio.understand();
-      this.wisps.dissolve(nodeId, this.particles);
-    }
-    store.set({ encounterId: null });
-    this.persist();
+  /** Leave any encounter without transferring provisional damage or item costs. */
+  retreatEncounter(): boolean {
+    const id = store.get().battlePhen;
+    if (id) this.creatures.get(id)?.setAgitation(0);
+    this.save.crystals += this.duelEscrow;
+    this.duelEscrow = 0;
+    this.releaseInput();
+    store.set({
+      battlePhen: null, duelId: null, dialogNpc: null, chatOpen: false,
+      cookOpen: false, journalOpen: false, loreStone: null,
+      paused: true, protectionOpen: "pause", combatEnabled: false,
+      damageFlash: 0, wood: this.save.wood, crystals: this.save.crystals,
+    });
+    return this.checkpoint();
   }
 
   openDialog(npcId: string) {
@@ -955,13 +1119,16 @@ export class GameWorld {
   // ── Rededuell-API (M3) ──
   /** Kristalle bezahlen (Duell) — false bei Deckungslücke */
   duelPay(n: number): boolean {
+    if (isProtectionPaused() || !store.get().duelId || !Number.isFinite(n) || n < 0) return false;
     if (this.save.crystals < n) return false;
     this.save.crystals -= n;
+    this.duelEscrow += n;
     return true;
   }
 
   /** Handel abschließen: benannt = fairer Preis (Differenz zurück), sonst teuer */
   duelSettle(kind: "named" | "unnamed", paid: number, fairPrice: number) {
+    if (isProtectionPaused() || !store.get().duelId) return;
     if (kind === "named") {
       const back = Math.max(0, paid - fairPrice);
       if (back > 0) {
@@ -979,6 +1146,7 @@ export class GameWorld {
       }
       grantXp(this.save.player, 8);
     }
+    this.duelEscrow = 0;
     this.persist();
   }
 
@@ -1032,16 +1200,6 @@ export class GameWorld {
     audio.victory();
     store.toast(`Echo aufgenommen: ${ed.crystals} Kristalle kehren zurück.`, "good");
     this.persist();
-  }
-
-  private dropEcho() {
-    const lost = this.save.crystals;
-    if (lost > 0) {
-      this.save.echoDrop = { x: this.player.pos.x, z: this.player.pos.z, crystals: lost };
-      this.save.crystals = 0;
-      this.spawnEchoOrb(this.player.pos.x, this.player.pos.z);
-      store.toast("Dein Echo bleibt zurück — du kannst es holen, wann immer du willst. Oder nie. Beides gehört dir.", "info");
-    }
   }
 
   // ── M2: Bauen, Loot, Truhen ─────────────────────────────────────
@@ -1231,45 +1389,40 @@ export class GameWorld {
     return this.save;
   }
 
-  /** QA-Hook (M4): aktive Strandläufer mit Positionen */
-  get wispList(): { nodeId: string; x: number; z: number }[] {
-    return this.wisps.list();
-  }
-
-  /** QA-Hook (M4): Nebel-Zustand eines Graph-Knotens */
-  fogOf(nodeId: string): string {
-    return fogStateOf(nodeId, this.save.graph);
+  /** Zeit für Anzeigen: verbleibende Wirkungen laufen während einer Pause nicht ab. */
+  getGameTime(): number {
+    return this.frozenAt ?? Date.now();
   }
 
   // ── Persistenz ───────────────────────────────────────────────────
-  private persist() {
+  private persist(): boolean {
+    this.extendFrozenDurations();
     this.save.ship = { x: this.ship.x, z: this.ship.z, heading: this.ship.heading };
     if (this.save.mode === "onfoot") this.save.playerPos = { x: this.player.pos.x, z: this.player.pos.z };
     this.save.timeOfDay = this.save.timeOfDay % 24;
-    persistSave(this.save);
+    // Unfinished dialogue payments stay provisional across save/reload or exit.
+    return persistSave(this.duelEscrow > 0 ? { ...this.save, crystals: this.save.crystals + this.duelEscrow } : this.save);
   }
 
   // ── Haupt-Loop ───────────────────────────────────────────────────
   private loop = () => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
-    const dt = Math.min(this.clock.getDelta(), 0.05);
+    const rawDt = this.clock.getDelta();
+    const dt = Math.min(rawDt, 0.05);
+    if (this.presentation !== null) {
+      if (this.presentationPaused()) {
+        this.updatePresentationEvidence();
+        return;
+      }
+      this.updateRenderBudget(rawDt, dt);
+      this.renderPresentation(dt);
+      return;
+    }
+    if (this.uiLock) return;
     const t = (this.elapsed += dt);
 
-    // FPS & adaptives Budget
-    const fps = 1 / Math.max(dt, 0.0001);
-    this.fpsEma = lerp(this.fpsEma, fps, 0.05);
-    this.qualityTimer += dt;
-    if (this.qualityTimer > 4) {
-      this.qualityTimer = 0;
-      if (this.fpsEma < 44 && this.qualityLevel < 3) {
-        this.qualityLevel++;
-        this.applyQuality();
-      } else if (this.fpsEma > 57 && this.qualityLevel > 0) {
-        this.qualityLevel--;
-        this.applyQuality();
-      }
-    }
+    this.updateRenderBudget(rawDt, dt);
 
     // Tageszeit & Wetter
     this.save.timeOfDay = (this.save.timeOfDay + (dt / DAY_LENGTH_S) * 24) % 24;
@@ -1416,7 +1569,7 @@ export class GameWorld {
 
       // Gegner
       this.attackCooldown = Math.max(0, this.attackCooldown - dt);
-      const enemyList = this.uiLock ? [] : this.enemies;
+      const enemyList = this.uiLock || !store.get().combatEnabled ? [] : this.enemies;
       for (const e of this.enemies) {
         // Sichtbarkeit strikt nach Distanz (Render-Last)
         const rvx = e.x - focus.x;
@@ -1481,7 +1634,6 @@ export class GameWorld {
     // NPCs & Lore-Steine
     this.npcs.update(dt, this.player.pos, this.uiLock);
     this.loreStones.update(t, this.camera.position);
-    this.wisps.update(t, focus);
 
     // Echo-Orb schwebt
     if (this.echoOrb) {
@@ -1562,12 +1714,13 @@ export class GameWorld {
 
     this.updateClouds(dt, focus);
     this.bloom.enabled = this.qualityLevel < 3;
-    // Planare Wasser-Reflexion, gestaffelt: Stufe 0/1 = jedes 2. Frame (30 Hz),
-    // Stufe 2 = jedes 4. Frame (15 Hz), Stufe 3 = aus (analytischer Himmel bleibt)
+    // Gestaffelte Reflexion: Stufe 0/1 jedes 2., Stufe 2 jedes 4. Frame.
     const reflEvery = this.qualityLevel < 2 ? 2 : this.qualityLevel === 2 ? 4 : 0;
     if (reflEvery > 0 && this.reflFrame++ % reflEvery === 0)
       this.water.renderReflection(this.renderer, this.scene, this.camera);
     this.composer.render();
+    this.presentationFrame++;
+    this.updatePresentationEvidence();
   };
 
   private createClouds() {
@@ -1602,9 +1755,28 @@ export class GameWorld {
     }
   };
 
+  private updateRenderBudget(rawDt: number, dt: number): void {
+    // Die Messung nutzt echte Frame-Zeit; nur die Simulation wird gekappt.
+    if (rawDt >= 0.001) {
+      const fps = 1 / Math.max(rawDt, 0.0001);
+      this.presentationFps = fps;
+      this.fpsEma = lerp(this.fpsEma, fps, 0.05);
+    }
+    this.qualityTimer += dt;
+    if (this.qualityTimer > 4) {
+      this.qualityTimer = 0;
+      if (this.fpsEma < 44 && this.qualityLevel < 3) {
+        this.qualityLevel++;
+        this.applyQuality();
+      } else if (this.fpsEma > 57 && this.qualityLevel > 0) {
+        this.qualityLevel--;
+        this.applyQuality();
+      }
+    }
+  }
+
   private applyQuality() {
-    // M4.1-Lektion: Schatten NIE ganz aus (ohne sie „schwebt“ alles) —
-    // stattdessen die Schatten-Map verkleinern; Reflexion gestaffelt ausdünnen.
+    // Remote a54593e: Schatten bleiben, ihre Auflösung sinkt mit dem Budget.
     const sunShadow = this.sky.sun.shadow;
     const setShadowRes = (px: number) => {
       if (sunShadow.mapSize.x !== px) {
@@ -1631,7 +1803,7 @@ export class GameWorld {
       case 2:
         this.composer.setPixelRatio(1);
         this.water.setHighQuality(false);
-        this.water.setReflection(true); // selten aktualisiert (Loop: jedes 4. Frame)
+        this.water.setReflection(true);
         setShadowRes(1024);
         this.renderer.shadowMap.enabled = true;
         break;
@@ -1639,7 +1811,7 @@ export class GameWorld {
         this.composer.setPixelRatio(0.85);
         this.water.setHighQuality(false);
         this.water.setReflection(false);
-        setShadowRes(512); // Schatten bleiben — klein, aber da
+        setShadowRes(512);
         this.renderer.shadowMap.enabled = true;
         break;
     }
@@ -1664,30 +1836,54 @@ export class GameWorld {
   }
 
   /** Für Overlays (Dialog-Aktionen verändern den Spielstand) */
-  persistPublic() {
-    this.persist();
+  persistPublic(): boolean {
+    return this.persist();
   }
 
   /** Öffentlich: Menü-Button „Speichern“ */
-  saveNow() {
-    this.persist();
+  saveNow(): boolean {
+    return this.persist();
+  }
+
+  checkpoint(): boolean {
+    return this.saveNow();
   }
 
   get canvasElement() {
     return this.renderer.domElement;
   }
 
-  dispose() {
+  dispose(persistState = true) {
+    if (this.disposed) return;
     this.disposed = true;
     cancelAnimationFrame(this.raf);
-    this.persist();
+    this.releaseInput();
+    this.unsubscribeStore?.();
+    if (persistState) {
+      audio.setPaused(true);
+      this.persist();
+    }
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
     window.removeEventListener("mousemove", this.onMouseMove);
     window.removeEventListener("mousedown", this.onMouseDown);
     window.removeEventListener("wheel", this.onWheel);
     window.removeEventListener("resize", this.onResize);
+    window.removeEventListener("blur", this.onBlur);
+    document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    for (const object of this.presentationObjects) {
+      this.scene.remove(object);
+      // Das Modell teilt Quellen-Materialien; nur eigene Preview-Geometrie freigeben.
+      if (object === this.presentationShip?.group) continue;
+      object.traverse((node) => {
+        if (node instanceof THREE.Mesh || node instanceof THREE.Points) {
+          node.geometry.dispose();
+          const materials = Array.isArray(node.material) ? node.material : [node.material];
+          for (const material of materials) material.dispose();
+        }
+      });
+    }
     this.renderer.dispose();
-    this.container.removeChild(this.renderer.domElement);
+    if (this.renderer.domElement.parentNode === this.container) this.container.removeChild(this.renderer.domElement);
   }
 }

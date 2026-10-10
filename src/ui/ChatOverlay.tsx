@@ -6,6 +6,7 @@ import { store } from "../game/store";
 import { getWorld } from "../game/runtime";
 import { parseBuildCommand, missingMaterials, matName } from "../game/materials";
 import { audio } from "../game/audio";
+import { areUiTimersPaused, useInterfacePaused } from "./usePausedTimers";
 
 interface Line {
   who: "me" | "sys";
@@ -25,6 +26,7 @@ export function ChatOverlay() {
 }
 
 function ChatInner() {
+  const paused = useInterfacePaused();
   const [lines, setLines] = useState<Line[]>([OPENING]);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -33,7 +35,7 @@ function ChatInner() {
     scrollRef.current?.scrollTo({ top: 999999 });
   }, [lines]);
 
-  const close = () => store.set({ chatOpen: false });
+  const close = () => { if (!areUiTimersPaused()) store.set({ chatOpen: false }); };
 
   const answer = (raw: string): string => {
     const world = getWorld();
@@ -60,7 +62,7 @@ function ChatInner() {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const text = input.trim();
-    if (!text) return;
+    if (!text || areUiTimersPaused()) return;
     audio.select();
     const reply = answer(text);
     setLines((l) => [...l, { who: "me", text }, { who: "sys", text: reply }]);
@@ -72,7 +74,7 @@ function ChatInner() {
       <div className="rounded-2xl border border-white/15 bg-[#0d1522]/92 backdrop-blur-md shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-4 py-2 bg-black/40 border-b border-white/10">
           <span className="text-sm font-semibold text-amber-100">🔨 Bau-Chat</span>
-          <button className="text-white/50 hover:text-white px-2" onClick={close} title="Schließen (Esc)">
+          <button className="text-white/50 hover:text-white px-2" onClick={close} disabled={paused} title="Schließen (Esc)">
             ✕
           </button>
         </div>
@@ -87,13 +89,14 @@ function ChatInner() {
         </div>
         <form className="flex gap-2 px-3 py-2.5 border-t border-white/10" onSubmit={submit}>
           <input
+            disabled={paused}
             autoFocus
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="baue floß …"
             className="flex-1 rounded-lg bg-black/40 border border-white/15 px-3 py-2 text-sm text-white outline-none focus:border-amber-300/60"
           />
-          <button type="submit" className="rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-semibold px-4 text-sm transition">
+          <button type="submit" disabled={paused} className="rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-semibold px-4 text-sm transition">
             Bau
           </button>
         </form>

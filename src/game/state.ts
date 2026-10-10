@@ -4,6 +4,13 @@ import { PHENOMENA, levelForXp, maxPresence, maxStability, maxStamina } from "./
 import { HARBOR, ISLANDS } from "./worldLayout";
 import { emptyGraphProgress, graphProgressFromIslands, type GraphProgress } from "./phenomenaGraph";
 import type { ActiveMeal, MicroKey } from "./cooking";
+import { store } from "./store";
+
+export interface GentleEncounterState {
+  step: "arrival" | "signs" | "choice" | "result" | "context";
+  choice: "look" | "mark" | "distance" | null;
+  completed: boolean;
+}
 
 export interface IslandState {
   id: string;
@@ -38,6 +45,7 @@ export interface PlacedStructure {
 }
 
 export interface SaveGame {
+  gentleEncounter?: GentleEncounterState;
   version: 3;
   player: PlayerState;
   islands: IslandState[];
@@ -82,6 +90,24 @@ export interface SaveGame {
 }
 
 const SAVE_KEY = "phaenomenautik3-save-v1";
+// JSON ignores symbol keys; shallow save copies retain the shared write origin.
+const saveOrigin = Symbol("save origin");
+type TrackedSave = SaveGame & { [saveOrigin]?: { raw: string | null } };
+function rememberSave(save: SaveGame, raw: string | null): SaveGame {
+  (save as TrackedSave)[saveOrigin] = { raw };
+  return save;
+}
+let unreadableSave = false;
+export function hasUnreadableSave() { return unreadableSave; }
+const unreadableMessage = "Ein vorhandener Spielstand lässt sich gerade nicht lesen. Er wurde nicht ersetzt. Hilfe bleibt erreichbar; der gespeicherte Bestand muss vor einer neuen Sicherung geprüft werden.";
+const conflictMessage = "In einer anderen Ansicht wurde der Spielstand geändert. Dieser Stand wurde nicht überschrieben. Dein aktueller Stand bleibt für diese Sitzung erhalten. Zum Fortsetzen des gespeicherten Stands öffne das Spiel neu; beim Schließen oder Neuladen kann dein Sitzungsstand verloren gehen.";
+function parseSave(raw: string): SaveGame {
+  const save = JSON.parse(raw) as SaveGame;
+  if (save?.version !== 3 || !Array.isArray(save.islands) || save.islands.length !== ISLANDS.length || !save.player || typeof save.player !== "object") {
+    throw new Error("Unreadable save");
+  }
+  return save;
+}
 const GF_KEY = "phaenomenautik3-gf-mode"; // Titel-Schalter, unabhängig vom Spielstand
 
 export function loadGfMode(): boolean {
@@ -104,7 +130,7 @@ export const SHIP_START = { x: HARBOR.x, z: HARBOR.z + 260, heading: 0 };
 export function newGame(): SaveGame {
   const islands: IslandState[] = ISLANDS.map((p) => ({ id: p.id, overcome: false, understood: false }));
   const player = freshPlayer(0);
-  return {
+  const save: SaveGame = {
     version: 3,
     player,
     islands,
@@ -142,6 +168,15 @@ export function newGame(): SaveGame {
     compassEntries: [],
     graph: emptyGraphProgress(),
   };
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw !== null) parseSave(raw);
+    return rememberSave(save, raw);
+  } catch {
+    unreadableSave = true;
+    store.set({ saveError: unreadableMessage });
+    return save;
+  }
 }
 
 export function freshPlayer(xp: number): PlayerState {
@@ -192,11 +227,11 @@ export function phenomenonIdFor(islandId: string) {
 }
 
 export function loadSave(): SaveGame | null {
+  unreadableSave = false;
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
-    const s = JSON.parse(raw) as SaveGame;
-    if (s.version !== 3 || !Array.isArray(s.islands) || s.islands.length !== ISLANDS.length) return null;
+    if (raw === null) return null;
+    const s = parseSave(raw);
     s.echoesFound ??= [];
     s.echoDrop ??= null;
     s.crystals ??= 0;
@@ -216,17 +251,32 @@ export function loadSave(): SaveGame | null {
     s.duelsDone ??= [];
     s.compassEntries ??= [];
     s.graph ??= graphProgressFromIslands(s.islands); // M4: alter Insel-Fortschritt wird ins Netz übernommen
-    return s;
+    return rememberSave(s, raw);
   } catch {
+    unreadableSave = true;
+    store.set({ saveError: unreadableMessage });
     return null;
   }
 }
 
-export function persistSave(s: SaveGame) {
+export function persistSave(s: SaveGame): boolean {
+  if (unreadableSave) { store.set({ saveError: unreadableMessage }); return false; }
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(s));
+    const raw = JSON.stringify(s);
+    const origin = (s as TrackedSave)[saveOrigin];
+    const current = localStorage.getItem(SAVE_KEY);
+    if (origin ? current !== origin.raw : current !== null) {
+      store.set({ saveError: conflictMessage });
+      return false;
+    }
+    localStorage.setItem(SAVE_KEY, raw);
+    if (origin) origin.raw = raw;
+    else rememberSave(s, raw);
+    store.set({ saveError: null });
+    return true;
   } catch {
-    /* ignorieren */
+    store.set({ saveError: "Der Spielstand konnte in diesem Browser nicht gespeichert werden. Für diese Sitzung bleibt er erhalten. Beim Schließen oder Neuladen kann der aktuelle Stand verloren gehen." });
+    return false;
   }
 }
 

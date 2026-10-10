@@ -3,7 +3,7 @@
 // Läuft vollständig offline im Browser. Erkennt Krisenäußerungen und antwortet
 // mit fürsorglichem Text + Notfallnummern.
 
-import { PHENOMENA, AROUSAL_LABEL } from "./data";
+import { PHENOMENA } from "./data";
 import type { NpcDef, NpcDomain } from "./npc";
 import type { SaveGame } from "./state";
 import { activeQuests, completableQuests, offerableQuests, QUESTS } from "./quests";
@@ -46,75 +46,75 @@ const K = (id: string, domain: NpcDomain, pattern: RegExp, text: string): Knowle
 const KNOWLEDGE: KnowledgeEntry[] = [
   // ── Symptome & Phänomene ──
   K("flashback", "symptome", /flashback|wiedererleb|intrusion|mitten im geschehen/,
-    "Flashbacks sind Erinnerungen, die nicht wie Erinnerungen kommen — sondern wie Nachschub. Der Körper glaubt, es sei JETZT. Was hilft: laut benennen, was heute ist. Ort, Datum, dein Alter. Die 5-4-3-2-1-Erdung im Kampf wirkt deshalb so stark gegen den Falter."),
+    "Auf dem Wiederkehr-Riff trägt ein Falter wechselnde Bilder. Diese erfundene Szene kann betrachtet oder ausgelassen werden. Sie erlaubt keine Aussage über eigene Erinnerungen."),
   K("albtraum", "symptome", /albt|traum|nachts wach|schlecht schlaf/,
-    "Albträume sind Wiedererleben im Schlaf. Es gibt eine erforschte Gegenwehr: Imagination Rehearsal — du schreibst das Traumende tagsüber bewusst um und übst das neue Ende. Das Nervensystem ist lernfähig, auch nachts."),
+    "Muras Insel erzählt eine erfundene Traumgeschichte. Du kannst ihr Lied aus der Ferne lesen oder die Szene verlassen. Das Spiel behandelt keine Schlafprobleme."),
   K("hypervigilanz", "symptome", /wachsam|hypervigilanz|standig auf der hut|gefahr uberall|schreckhaft/,
-    "Ständige Wachsamkeit ist ein Dauerzustand des Sympathikus — der Körper hält Wache, obwohl der Krieg vorbei ist. Das ist keine Schwäche, es ist ein überlebensnotwendiger Dienst, der nicht abgelöst wurde. Was hilft: dem System tausendmal beweisen, dass jetzt sicher ist. Lang ausatmen. Blick schweifen lassen."),
+    "Der kristallene Wächter dreht sein Licht über das Atoll. Sein Spieltyp heißt hohe Aktivität; das beschreibt nur eine Regel dieser Figur."),
   K("panik", "symptome", /panik|herzrasen|atemnot|enge in der brust|herz rast/,
-    "Herzrasen und Enge ohne Befund sind vegetative Alarmzeichen — dein innerer Botenjunge, der nie gelernt hat, langsam zu gehen. Schnellste Gegenwehr: der physiologische Seufzer. Doppelt einatmen, laaang ausatmen. Das aktiviert den Vagusnerv binnen Sekunden."),
+    "Das Trommelwesen stellt einen Spielrhythmus dar. Eigene Beschwerden wie Herzrasen, Atemnot oder Brustenge lassen sich hier nicht einschätzen. Bei unmittelbarer Gefahr gilt in Deutschland 112; für dringende medizinische Anliegen außerhalb der Sprechzeiten 116 117."),
   K("vermeidung", "symptome", /vermeid|ausweich|drucken|schieb.*auf|prokrastin/,
-    "Vermeidung funktioniert — kurzfristig. Deshalb ist sie so zäh. Langfristig hält sie das Alarmsystem am Laufen: Was nie berührt wird, bleibt gefährlich. Der Mittelweg ist dosierter Kontakt, keine Heldentaten. Ein Schritt, dann Luft holen, dann der nächste."),
+    "Vermeidia zeichnet mehrere Wege in den Sand. Auch ein Umweg oder Rückweg zählt als selbst gewählte Spielentscheidung. Es gibt keine Pflicht zur Annäherung."),
   K("dissoziation", "symptome", /dissozi|nebenselbst|unwirklich|wie durch glas|weg sein|abwesend/,
-    "Dissoziation ist die Notbremse des dorsalen Vagus: Wenn Kämpfen und Fliehen zwecklos waren, schaltet das System ab — wie durch Glas schauen. Das hat dich beschützt, als nichts anderes ging. Zurück kommst du über Aktivierung: Füße aufstampfen, Hände warm reiben, deinen Namen laut sagen."),
+    "Dissozia ist eine erfundene Glasgeistin. Die Glasbögen dienen als Bild für Abstand; sie erklären keine persönliche Verfassung. Betrachten und Verlassen sind mögliche Wege."),
   K("erstarrung", "symptome", /erstarr|einfrier|freeze|gelahmt|kann mich nicht bewegen/,
-    "Erstarren ist keine Entscheidung und kein Versagen — es ist die älteste Verteidigung überhaupt. Der Bogen spannt sich ohne Pfeil. Sanftes Durchbewegen hilft: Zehen wackeln, Finger, dann größer. Niemals forcieren. Erstarrung hasst Forderungen, aber sie mag Einladungen."),
+    "Erstarrion steht zwischen Eisblöcken. Die Spielfigur darf stehen bleiben oder weitergehen. Die Szene fordert keine Bewegung des eigenen Körpers."),
   K("scham", "symptome", /scham|schuld|wertlos|kaputt|nicht gut genug|hass.*selbst/,
-    "Hör gut zu, das ist wichtig: Tiefe Scham ist ein Kernsymptom komplexer Traumatisierung — keine Tatsache über dich. Das Gefühl 'kaputt zu sein' ist die innere Übernahme dessen, was dir angetan wurde. Es ist veränderbar. Du hast es nicht verdient, und du hast es nie verdient."),
+    "Der Scham-Golem baut eine Mauer aus beschrifteten Steinen. Die Schrift bewertet die spielende Person nicht. Du kannst auch den freien Uferweg wählen."),
   K("leere", "symptome", /leere|hoffnungslos|nichts fuhl|taub|freudlos|sinnlos/,
-    "Innere Leere ist selten das Fehlen von Gefühl — sie ist Gefühl, das Sicherheiten gezogen hat. Gefühle kommen nicht auf Befehl zurück, aber über kleine, dosierte Sinneserfahrungen: Wärme der Tasse in der Hand, ein Lied, ein Atemzug, der bewusst ausklingt."),
+    "Die Insel der Leere enthält eine Schale und viel freien Raum. Das ist ein Bild dieser Geschichte. Hier wird keine Gefühlslage bewertet und keine Veränderung versprochen."),
   K("misstrauen", "symptome", /vertrau|misstrau|nahe|klammer|distanz|allein bleib/,
-    "Wenn Nähe verletzt hat, wird sie zur Sehnsucht UND zur Bedrohung zugleich — Klammern und Wegstoßen sind zwei Seiten derselben Münze. Heilung passiert nicht per Beschluss, sondern durch kleine, verlässliche Nähe-Erfahrungen. Ein Mensch, der bleibt. Wieder und wieder."),
+    "Die Figuren auf dem Riff wählen Abstand und Kontakt. Diese Wahl erlaubt keine Beurteilung realer Beziehungen. Ben ist eine erfundene Figur und kein Erfahrungsbericht."),
   K("koerper", "symptome", /magen|schmerz|haut|kopfweh|verspann|korperlich/,
-    "Der Körper trägt die Geschichte mit — Magen, Haut, Kiefer, Schultern. Er reagiert oft früher als der Kopf; das vegetative Nervensystem 'merkt' sich Belastung. Körperorientierte Übungen sprechen genau diese Ebene an. Frag mich ruhig nach konkreten Übungen."),
+    "Der Dialog kann körperliche Beschwerden nicht einschätzen. Die Spielwerte beschreiben nur die Spielfigur. Bei dringenden medizinischen Anliegen außerhalb der Sprechzeiten erreichst du in Deutschland 116 117; bei unmittelbarer Gefahr 112."),
 
   // ── Übungen ──
   K("erdung", "uebungen", /erdung|5 4 3 2 1|grounding/,
-    "Die 5-4-3-2-1-Erdung: Nenne 5 Dinge, die du siehst. 4, die du hörst. 3, die du spürst. 2, die du riechst. 1, das du schmeckst. Danach drei lange Ausatmungen. Das zieht die Aufmerksamkeit aus dem Damals ins Jetzt — wirkt im Kampf stark gegen übererregte Phänomene."),
+    "Eine freiwillige Idee ist, etwas Angenehmes oder Neutrales im Raum wahrzunehmen. Die Spielaktion lässt sich auch allein durch Lesen wählen; Zählen und körperliche Durchführung sind nicht nötig."),
   K("seufzer", "uebungen", /seufzer|atmen|atemubung|doppel einatmen/,
-    "Der physiologische Seufzer: Tief durch die Nase einatmen, dann noch einen kleinen Schluck Luft oben drauf — und laaang durch den Mund ausseufzen. Drei bis fünf Mal. Das ist die schnellste bekannte Bremse für den Sympathikus. Mitten im Gespräch machbar, keiner merkt es."),
+    "Du musst deinen Atem für die Spielaktion nicht verändern. Wenn du möchtest, kannst du ihn nur bemerken. Auslassen oder die Szene verlassen sind vollständige Möglichkeiten."),
   K("voo", "uebungen", /voo|summen|vagus.*stimul|klang|tonen/,
-    "Der Voo-Klang: Tief einatmen, dann auf dem Ausatem ein tiefes, sonores 'Vooo' tönen lassen — wie ein Nebelhorn in deinem Bauch. Die Vibration massiert den Vagusnerv. Summen, Singen und bewusstes Gähnen wirken genauso. Vier bis sechs Wiederholungen."),
+    "Du kannst einen leisen Ton hören oder summen, wenn das angenehm ist. Schweigen ist ebenso möglich. Das Spiel verspricht dadurch keine körperliche Wirkung."),
   K("schuetteln", "uebungen", /abschuttel|tremor|zittern/,
-    "Abschütteln ist uralte Säugetier-Weisheit: Nach überlebener Gefahr schüttelt der Körper die Stresschemie ab. Steh mit weichen Knien, lass das Zittern aus den Beinen aufsteigen, 5–10 Minuten. Nicht steigern — zulassen. Bei komplexem Trauma zuerst mit Begleitung üben."),
+    "Für diese Spielaktion ist keine körperliche Durchführung nötig. Eine kleine selbst gewählte Bewegung ist optional; Zittern muss weder ausgelöst noch verstärkt werden."),
   K("pendeln", "uebungen", /pendel/,
-    "Pendeln kommt aus Somatic Experiencing: Spür kurz die belastende Empfindung — nur Sekunden — dann wechsle bewusst zu etwas Angenehmem. Enge, Wärme, Enge, Wärme. So lernt dein Nervensystem: Ich kann mich nähern UND zurückziehen. Das weitet das Toleranzfenster."),
+    "Du kannst die Aufmerksamkeit auf etwas Neutrales richten. Belastende Empfindungen müssen dafür nicht aufgesucht werden. Du kannst auch nur die Szene lesen."),
   K("koerperscan", "uebungen", /korper.*scan|bodyscan|innere landkarte/,
-    "Der Körperscan baut deine innere Landkarte: Wander mit der Aufmerksamkeit von den Füßen hoch zum Gesicht und frag an jeder Station nur 'Was ist hier?' — Druck, Wärme, Kribbeln, Nichts. Alles ist erlaubt, nichts muss bewertet werden."),
+    "Wenn du möchtest, kannst du etwas Angenehmes oder Neutrales bemerken. Nach innen zu schauen ist keine Voraussetzung. Die Auswahl im Spiel genügt."),
   K("sichererort", "uebungen", /sicherer ort|imagination|innerer ort/,
-    "Der innere sichere Ort: Stell dir einen Ort vor — real oder erfunden — an dem du völlig sicher bist. Mach ihn greifbar: Was siehst, hörst, riechst du? Verankere ihn mit einer Geste, zwei Finger etwa. Dann ist er jederzeit abrufbar. Wichtig: Er muss sich WIRKLICH sicher anfühlen."),
+    "Ein selbst gewählter realer oder erfundener Ort kann als Bild dienen. Ein vollkommen sicherer Ort muss nicht vorgestellt werden. Auslassen bleibt möglich."),
   K("coreg", "uebungen", /co regulation|zusammen sein|andere menschen helfen|jemand anrufen/,
-    "Co-Regulation ist das stärkste Regulationssystem überhaupt: Ein ruhiges, warmes Gegenüber reguliert dein Nervensystem über Stimme, Mimik und Rhythmus mit — automatisch, stärker als jede Solotechnik. Deshalb heilt, was in Beziehung verletzt wurde, auch vor allem IN Beziehung."),
+    "Kontakt zu einem selbst gewählten Menschen ist eine mögliche eigene Entscheidung. Die Spielfigur stellt keinen menschlichen Kontakt dar und verspricht keine Wirkung."),
 
   // ── Wissenschaft ──
   K("nervensystem", "wissenschaft", /nervensystem|vegetativ|autonom/,
-    "Das autonome Nervensystem steuert, was du nicht befehlen kannst: Herzschlag, Atmung, Verdauung, Alarmbereitschaft. Es hat zwei große Regler — den Sympathikus (Gas: Kampf/Flucht) und den Parasympathikus (Bremse: Ruhe/Verdauung). Trauma klemmt das Gaspedal fest oder zieht die Notbremse."),
+    "Das Meer ist eine Metapher, keine Abbildung eines Nervensystems. Spielwerte wie Präsenz und Stabilität lassen sich nicht auf eine Person übertragen. Die Quellen des TRAUMAATLAS sind von diesen erfundenen Dialogen zu unterscheiden."),
   K("polyvagal", "wissenschaft", /polyvagal|vagus|porges/,
-    "Die Polyvagal-Theorie von Stephen Porges beschreibt drei Stufen: ventraler Vagus (sichere Verbundenheit), Sympathikus (Kampf/Flucht), dorsaler Vagus (Erstarrung/Shutdown). Traumafolgen sind Zustände dieses Systems — keine Charakterfehler. Und Zustände sind veränderbar."),
+    "Die Polyvagal-Theorie ist eine thematische Bezugnahme des Ausgangsmaterials. Dieser Dialog kann ihren wissenschaftlichen Stand nicht bewerten. Daraus werden keine körperlichen Zustände oder passenden Übungen für dich abgeleitet."),
   K("toleranzfenster", "wissenschaft", /toleranzfenster|fenster der toleranz/,
-    "Das Toleranzfenster ist der Erregungsbereich, in dem du denken UND fühlen kannst. Darüber: Übererregung — Herzrasen, Wut, Panik. Darunter: Untererregung — Taubheit, Leere, Erstarrung. Jede Übung auf diesem Meer tut im Kern dasselbe: Sie weitet dein Fenster."),
+    "TOLERANZ ist der Name des Schiffs; das Bild eines Fensters erscheint im Ausgangsmaterial. Fortschritt und Zahlen im Spiel messen kein persönliches Toleranzfenster."),
   K("ptbs", "wissenschaft", /ptbs|ptsd|posttraumatisch/,
-    "PTBS — die posttraumatische Belastungsstörung — folgt meist einem einmaligen Ereignis: Intrusionen, Vermeidung, anhaltende Bedrohungswahrnehmung. Sie ist gut behandelbar, vor allem mit traumafokussierter KVT und EMDR. Das sind die Leitlinien-Verfahren."),
+    "PTBS ist ein klinischer Begriff. Ob er auf eine Person zutrifft, lässt sich in diesem Spiel nicht feststellen. Persönliche Diagnosen und Behandlungsentscheidungen gehören in ein Gespräch mit qualifizierten Menschen."),
   K("kptbs", "wissenschaft", /komplex|kptbs|kindheitstrauma|entwicklungstrauma/,
-    "Komplexe PTBS entsteht durch wiederholte oder langanhaltende Traumatisierung, oft in der Kindheit und in Abhängigkeitsbeziehungen. Seit 2022 ist sie in der ICD-11 eigenständig anerkannt. Zusätzlich zur PTBS-Trias kommen Affektdysregulation, negatives Selbstbild und Beziehungsstörungen. Hilfe: phasenorientierte Traumatherapie."),
+    "Komplexe PTBS ist ein klinischer Begriff. Die fiktiven Figuren können ihn weder erkennen noch bestätigen. Aus eigenen Spielentscheidungen wird keine Diagnose abgeleitet."),
   K("amygdala", "wissenschaft", /amygdala|mandelkern|alarmzentrale/,
-    "Die Amygdala ist der Rauchmelder des Gehirns: schnell, grob, lieber einmal zu oft Alarm als einmal zu wenig. Nach Trauma ist sie feuere empfindlich eingestellt. Atmung, Erden und sichere Beziehungen justieren den Melder über Zeit neu — Bottom-up, nicht per Argument."),
+    "Die Amygdala gehört zu den Begriffen des Ausgangsmaterials. Eine Alarmfigur im Spiel bildet keine einzelne Hirnregion ab. Die Szene erlaubt keine Aussage über das eigene Gehirn."),
 
   // ── Welt & Praktisches ──
   K("inseln", "lore", /insel|phanomen|archipel|was ist das fur/,
-    "Jede Insel da draußen ist ein Phänomen — etwas, das Menschen nach schweren Zeiten erleben: Wiedererleben, Wachsamkeit, Vermeidung, Erstarrung, Scham. Solange du sie umschiffst, bleiben sie Stürme. Wenn du anlandest und ihnen begegnest, werden sie Landschaft."),
+    "Die Inseln sind erfundene Landschaften, die thematische Begriffe als Bilder aufgreifen. Du kannst sie betreten, aus der Ferne betrachten oder auslassen. Es gibt keine Pflicht, sie abzuschließen."),
   K("sturmherd", "lore", /sturmherd|mitte|auge des/,
-    "In der Mitte der Karte dreht sich der Sturmherd — das, was nie erzählt, nie geweint, nie gehört wurde. Er öffnet sich erst, wenn alle zwölf Phänomene überwunden sind. Man sagt: Wer ihm begegnet, kommt mit normalem Wetter zurück. Ehrlichem, menschlichem Wetter."),
+    "Der Sturmherd bildet einen erzählerischen Abschluss dieser Seekarte. Die Freischaltung ist eine Spielregel. Du musst dafür keine persönliche Geschichte erzählen und kannst den Besuch auslassen."),
   K("meer", "meer", /meer|see|ozean|wasser|wo sind wir/,
-    "Dieses Meer steht auf keiner Karte der Welt, aber auf jeder Karte der Seele. Es besteht aus allem, was Menschen erlebt und überlebt haben. Deshalb segelt hier jeder irgendwann — die einen freiwillig, die anderen werden geworfen. Du hast ein Schiff. Das ist mehr, als viele haben."),
+    "Dieses Meer ist eine erfundene Landschaft. Es bietet Wege zum Segeln, Lesen und Erkunden; es behauptet nichts über die Lebensgeschichte der spielenden Person."),
   K("wetter", "meer", /wetter|sturm|wellen|wind/,
-    "Das Wetter hier folgt keinem Kalender — es folgt Erregung. Sturmzellen treiben über die See; drinnen ist es rau, aber es gibt nichts, was du nicht durchqueren oder umfahren könntest. Merks dir: Auch das schwerste Wetter ist WETTER. Es geht vorbei. Wetter geht immer vorbei."),
+    "Wind und Wellen gehören zur Spielwelt. Du kannst Sturmzellen umfahren oder am Ankerplatz bleiben. Das Wetter ist keine Aussage über eigene Gefühle oder Gefahren."),
   K("treibholz", "schiff", /treibholz|holz|material|sammel/,
     "Treibholz schwimmt als goldene Planken auf dem Wasser — einfach mit dem Schiff drüberfahren. In Sturmzellen treibt mehr davon, aber Achtung: Dort schaukelt es übel. Bring es zu Kaj, er baut dir was Feines draus."),
   K("ausbau", "schiff", /ausbau|schneller|upgrade|tunen|verbesser/,
     "Kaj kann dein Schiff zweimal ausbauen — erst der Rumpf, dann die Segel. Danach frisst dein Kahn jede Welle von vorne. Bring ihm Treibholz, dann redet er von allein über Preise. Sprich: Er baut, du lieferst."),
   K("ankerplatz", "lore", /ankerplatz|hafen|dieser ort|wer lebt hier/,
-    "Der Ankerplatz ist der einzige Fleck auf diesem Meer, der nie Phänomen war — oder schon so lange befriedet, dass es keiner mehr weiß. Hier landen die an, die zwischen zwei Stürmen Luft holen. Mara lotst, Tove heilt, Kaj baut, die Doktorin forscht. Und Ben … Ben wartet noch auf sein Wetter."),
+    "Am Ankerplatz stehen Mara, Tove, Kaj, Dr. Wiegand und Ben als erfundene Figuren. Mara erzählt vom Meer, Tove von freiwilligen Spielaktionen, Kaj vom Schiff; Wiegand und Ben erzählen aus der erfundenen Welt."),
 ];
 
 // Phänomen-Fragen dynamisch ergänzen
@@ -124,25 +124,33 @@ for (const p of PHENOMENA) {
     id: `phen_${p.id}`,
     domain: "symptome",
     pattern: new RegExp(pName.split(/[ ,]/)[0].replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "|" + p.id, "i"),
-    answer: () =>
-      `${p.name} — ${p.epithet}. Es haust im Archipel „${p.archipelago}" und ist ${AROUSAL_LABEL[p.arousal].toLowerCase()}. Im Kampf gilt: ${
-        p.arousal === "hyper"
-          ? "beruhigende Übungen wie Erdung, Seufzer oder Voo-Klang wirken am stärksten (★)."
-          : p.arousal === "hypo"
-            ? "aktivierende Übungen wie das Aktivierungs-SOS wirken am stärksten (★)."
-            : "ausgleichende Übungen wie Pendeln oder Co-Regulation tragen am sichersten."
-      } Oder du versuchst, es zu VERSTEHEN — manche Phänomene lassen sich eher umarmen als bezwingen.`,
+    answer: () => `${p.name} — ${p.epithet}. Eine erfundene Figur im Archipel „${p.archipelago}“. ${p.insight} Du kannst die Szene freiwillig betrachten, wählen oder verlassen.`,
   });
 }
 
 // ─── Persönlichkeits-Wrapper ───────────────────────────────────────
 
 const OPENERS: Record<string, string[]> = {
-  mara: ["Hör zu, Kind der See:", "Ahoi. Das sag ich dir so, wie ich's jeder Crew sage:", "Na gut, Seemanns-Weisheit gefällig?"],
-  tove: ["Komm, atme einmal durch, während ich dir das sage:", "Mit warmen Händen gesprochen:", "Ich sag dir, was ich allen hier sage:"],
-  kaj: ["Pass auf, so einfach ist das:", "Hört sich kompliziert an, ist es nicht:", "Ich erklär's dir wie an ner Werkbank:"],
-  ilse: ["Wissenschaftlich gesprochen — aber ich übersetze:", "Eine gute Frage. Die Datenlage dazu:", "Lassen Sie mich das präzisieren:"],
-  ben: ["Ich … ich weiß da was aus eigener Erfahrung:", "Das hat mir Tove mal erklärt, und es stimmt:", "Ich sag dir, was mir geholfen hat:"],
+  "mara": [
+    "Aus Maras Seekarten:",
+    "Mara erzählt aus der Spielwelt:"
+  ],
+  "tove": [
+    "Toves freiwillige Idee:",
+    "Eine Spielnotiz von Tove:"
+  ],
+  "kaj": [
+    "Kaj erklärt das Schiff im Spiel:",
+    "Eine Notiz aus Kajs Werkstatt:"
+  ],
+  "ilse": [
+    "Eine Notiz der erfundenen Forscherin:",
+    "Wiegands Hinweis zur Spielmetapher:"
+  ],
+  "ben": [
+    "Ben erzählt als erfundene Figur:",
+    "Bens Notiz aus dieser Geschichte:"
+  ]
 };
 
 const pick = <T,>(arr: T[], seed: number): T => arr[Math.abs(seed) % arr.length];
@@ -158,7 +166,7 @@ export function npcReply(npc: NpcDef, rawInput: string, save: SaveGame, turnCoun
   const nameMatch = rawInput.match(/ich hei(?:ß|ss)e\s+([A-ZÄÖÜ][\p{L}]+)/u);
   if (nameMatch) {
     return {
-      text: `${nameMatch[1]}. Ein guter Name für diese See. Ich werde ihn mir merken, ${nameMatch[1]} — versprochen.`,
+      text: `Der gewählte Name ist jetzt ${nameMatch[1]}. Du kannst ihn später ändern.`,
       action: { type: "setName", name: nameMatch[1] },
     };
   }
@@ -166,7 +174,7 @@ export function npcReply(npc: NpcDef, rawInput: string, save: SaveGame, turnCoun
   // 1) KRISENERKENNUNG — höchste Priorität
   if (/(umbringen|suizid|selbstmord|nicht mehr leben|will sterben|sterben will|mich toten|selbstverletz|ritzen|kein ausweg mehr)/.test(input)) {
     return {
-      text: `Halt kurz inne — ich bin froh, dass du das aussprichst, und ich nehme es ernst. Was du gerade trägst, klingt zu schwer für ein Schiff allein. Bitte sprich noch heute mit Menschen, die genau dafür da sind: Telefonseelsorge 0800 111 0 111 oder 0800 111 0 222 (kostenfrei, rund um die Uhr), im akuten Notfall die 112. Du musst das nicht allein tragen. Wirklich nicht.`,
+      text: "Falls diese Worte deine aktuelle Situation beschreiben: Bei unmittelbarer Gefahr rufe in Deutschland 112. TelefonSeelsorge erreichst du unter 116 123, 0800 111 0 111 oder 0800 111 0 222, kostenfrei und rund um die Uhr. Bei dringenden medizinischen Anliegen außerhalb der Sprechzeiten: 116 117. Dieser vorgefertigte Spieldialog kann deine Lage nicht einschätzen. Du kannst das Spiel unterbrechen und Kontakt zu einem selbst gewählten Menschen suchen.",
     };
   }
 
@@ -176,7 +184,7 @@ export function npcReply(npc: NpcDef, rawInput: string, save: SaveGame, turnCoun
     if (completable.length > 0) {
       const q = completable[0];
       return {
-        text: `Du hast es geschafft! „${q.title}" ist erledigt. Hier — ${q.reward}. Redlich verdient, ${name}.`,
+        text: `Die Spielaufgabe „${q.title}“ ist abgeschlossen. Spielbelohnung: ${q.reward}.`,
         action: { type: "turnInQuest", questId: q.id },
       };
     }
@@ -184,23 +192,22 @@ export function npcReply(npc: NpcDef, rawInput: string, save: SaveGame, turnCoun
     if (offer.length > 0) {
       const q = offer[0];
       return {
-        text: `Tatsächlich, ja. Hört zu: ${q.desc} (Lohn: ${q.reward}) — Ich trage es dir ins Journal ein. Sag Bescheid, wenn es erledigt ist!`,
-        action: { type: "acceptQuest", questId: q.id },
+        text: `Eine freiwillige Spielaufgabe: ${q.desc} (Spielbelohnung: ${q.reward}). Wenn du sie übernehmen möchtest, antworte „Ich mache es“.`,
       };
     }
     const active = activeQuests(save);
     if (active.length > 0) {
       const lines = active.map((q) => `• ${q.title}: ${q.goalDesc(save)}`).join("\n");
-      return { text: `Du hast schon genug auf dem Zettel, ${name}:\n${lines}\nKomm wieder, wenn davon etwas erledigt ist.` };
+      return { text: `Offene freiwillige Spielaufgaben:\n${lines}\nDu bestimmst, ob und wann du sie fortsetzt.` };
     }
     return { text: `Im Moment ist alles vergeben, ${name}. Die See wird schon für Nachschub sorgen — das tut sie immer.` };
   }
 
-  if (/^(ja|gern|ich mache es|mach ich|bin dabei|okay|abgemacht|einverstanden)/.test(input)) {
+  if (/^(ich mache es|ich ubernehme die aufgabe|ich nehme die aufgabe an)\b/.test(input)) {
     const offer = offerableQuests(save, npc.id)[0];
     if (offer) {
       return {
-        text: `Abgemacht! „${offer.title}" steht jetzt in deinem Journal. ${offer.goalDesc(save)} — und komm heil zurück, ${name}.`,
+        text: `Die freiwillige Spielaufgabe „${offer.title}“ steht jetzt im Journal. ${offer.goalDesc(save)} Du bestimmst das Tempo.`,
         action: { type: "acceptQuest", questId: offer.id },
       };
     }
@@ -217,19 +224,19 @@ export function npcReply(npc: NpcDef, rawInput: string, save: SaveGame, turnCoun
   }
   if (/wie geht|wie fuhlst|alles gut|was machst du/.test(input)) {
     const moods: Record<string, string> = {
-      mara: "Mir? Der Rücken meckert, der Horizont nicht — also alles im Lot. Wichtiger: Wie geht's DIR, nach all der Seefahrt?",
-      tove: "Danke der Nachfrage — die wenigsten fragen die Heilerin. Mir geht es gut, wenn es euch gut geht. Und dir selbst? Spür mal kurz in dich hinein, ich warte.",
-      kaj: "Gut! Die Werkbank steht, das Holz trocknet, was will man mehr. Dir fehlt noch ein ordentlicher Ausbau, aber das kriegen wir hin.",
-      ilse: "Fasziniert, wie immer — jede Rückkehr von Ihnen bringt neue Datenpunkte. Aber ich glaube, Sie fragen höflich. Also: gut, danke.",
-      ben: "Besser, seit du manchmal vorbeischaust. Manche Tage sind lauter als andere, wenn du verstehst. Heute ist … ein leiserer Tag.",
-    };
+  "mara": "Mara prüft gerade die Seekarte. Sie erzählt aus der Spielwelt.",
+  "tove": "Tove sammelt freiwillige Ideen für Spielaktionen. Du brauchst ihr nichts Persönliches zu berichten.",
+  "kaj": "Kaj wartet an seiner Werkbank. Schiffsausbau ist eine optionale Spielaufgabe.",
+  "ilse": "Wiegand sortiert ihre erfundenen Seekarten; persönliche Daten sind dafür nicht erforderlich.",
+  "ben": "Ben sitzt als erfundene Figur am Feuer. Sein Text ist kein Bericht eines realen Betroffenen."
+};
     return { text: moods[npc.id] ?? "Es geht. Und dir?" };
   }
   if (/danke/.test(input)) {
     return { text: pick(["Nichts zu danken. Dafür ist ein Hafen da.", "Gern geschehen — und pass auf dich auf da draußen.", "Immer wieder gern, " + name + "."], turnCount) };
   }
   if (/tschuss|auf wiedersehen|bye|leb wohl|machs gut|ich muss weiter/.test(input)) {
-    return { text: pick(["Ruhige See dir, " + name + ". Und denk dran: Wetter geht vorbei.", "Leb wohl — der Ankerplatz bleibt, wo er ist. Komm wieder.", "Segel gut. Und falls es stürmt: Du weißt, wo du uns findest."], turnCount) };
+    return { text: pick(["Bis zu einem selbst gewählten nächsten Besuch, " + name + ".", "Leb wohl — der Ankerplatz bleibt, wo er ist. Komm wieder.", "Segel gut. Und falls es stürmt: Du weißt, wo du uns findest."], turnCount) };
   }
   if (/wer bist du|was machst du hier|dein name/.test(input)) {
     return { text: mem?.met ? npc.greeting : npc.greeting };
@@ -238,12 +245,12 @@ export function npcReply(npc: NpcDef, rawInput: string, save: SaveGame, turnCoun
   // 4) Gefühle des Spielers (Empathie, vor Wissensbasis)
   if (/ich habe angst|mir ist angst|ich bin traurig|ich fuhle mich allein|ich bin mude|ich kann nicht mehr|es ist zu viel|ich bin verzweifelt/.test(input)) {
     const comfort: Record<string, string> = {
-      tove: `Das darf sein, ${name}. Alles davon. Leg für einen Moment eine Hand auf deinen Brustkorb — spür die Wärme. Atme in die Hand hinein. Du musst jetzt nichts lösen, nur diesen einen Atemzug. Und wenn es zu schwer wird: Telefonseelsorge, 0800 111 0 111, rund um die Uhr. Auch ich bleibe hier.`,
-      ben: `Ich … kenne das. Wirklich. An solchen Tagen hilft es mir, einfach neben jemandem zu sitzen, ohne dass einer reden muss. Setz dich zu mir ans Feuer, solange du willst. Und Tove hat mir mal gesagt: Gefühle sind Wetter, keine Klimazone. Es stimmt.`,
-      mara: `Dann hast du gute Menschen an Bord, ${name} — uns. Jede Crew der Welt hatte solche Tage. An Land gehen, Tee trinken, schlafen. Morgen sieht dieselbe See schon anders aus. Versprochen.`,
-      ilse: `Das ist eine nachvollziehbare Reaktion auf eine anstrengende Reise — kein Defekt. Die Forschung ist da eindeutig: Erst regulieren, dann reflektieren. Tove ist die Expertin dafür. Aber bleiben Sie gern erst mal hier sitzen.`,
-      kaj: `Hey. Runter vom Schiff, Hände an die Werkbank, was Anfassen hilft. Du musst nicht stark sein, nur da. Und wenn's dunkler wird, als Werkbänke reichen — Tove ist die Richtige, ehrlich.`,
-    };
+  "mara": "Der Spieldialog kann nicht einschätzen, wie es dir geht. Du musst hier nichts lösen oder offenlegen. Du kannst pausieren, das Spiel verlassen oder einen selbst gewählten Menschen kontaktieren. In Deutschland ist TelefonSeelsorge unter 116 123 rund um die Uhr kostenfrei erreichbar; bei unmittelbarer Gefahr gilt 112.",
+  "tove": "Der Spieldialog kann nicht einschätzen, wie es dir geht. Du musst hier nichts lösen oder offenlegen. Du kannst pausieren, das Spiel verlassen oder einen selbst gewählten Menschen kontaktieren. In Deutschland ist TelefonSeelsorge unter 116 123 rund um die Uhr kostenfrei erreichbar; bei unmittelbarer Gefahr gilt 112.",
+  "kaj": "Der Spieldialog kann nicht einschätzen, wie es dir geht. Du musst hier nichts lösen oder offenlegen. Du kannst pausieren, das Spiel verlassen oder einen selbst gewählten Menschen kontaktieren. In Deutschland ist TelefonSeelsorge unter 116 123 rund um die Uhr kostenfrei erreichbar; bei unmittelbarer Gefahr gilt 112.",
+  "ilse": "Der Spieldialog kann nicht einschätzen, wie es dir geht. Du musst hier nichts lösen oder offenlegen. Du kannst pausieren, das Spiel verlassen oder einen selbst gewählten Menschen kontaktieren. In Deutschland ist TelefonSeelsorge unter 116 123 rund um die Uhr kostenfrei erreichbar; bei unmittelbarer Gefahr gilt 112.",
+  "ben": "Der Spieldialog kann nicht einschätzen, wie es dir geht. Du musst hier nichts lösen oder offenlegen. Du kannst pausieren, das Spiel verlassen oder einen selbst gewählten Menschen kontaktieren. In Deutschland ist TelefonSeelsorge unter 116 123 rund um die Uhr kostenfrei erreichbar; bei unmittelbarer Gefahr gilt 112."
+};
     return { text: comfort[npc.id] ?? comfort.tove };
   }
 
@@ -252,11 +259,11 @@ export function npcReply(npc: NpcDef, rawInput: string, save: SaveGame, turnCoun
     if (entry.pattern.test(input)) {
       const known = mem?.topics.includes(entry.id);
       const opener = pick(OPENERS[npc.id] ?? OPENERS.mara, turnCount + entry.id.length);
-      const text = (known ? "Das hatten wir schon — aber es verträgt Wiederholung: " : opener + " ") + entry.answer(npc, save);
+      const text = (known ? "Zur Orientierung in der Spielwelt: " : opener + " ") + entry.answer(npc, save);
       if (!npc.domains.includes(entry.domain)) {
         const ref = npc.refersTo[entry.domain];
         return {
-          text: `${entry.answer(npc, save)}${ref ? `\n\nAber ehrlich gesagt: Dafür ist ${ref} die bessere Anlaufstelle — steht auch hier auf dem Ankerplatz.` : ""}`,
+          text: `${entry.answer(npc, save)}${ref ? `\n\nIn der Spielwelt erzählt auch ${ref} zu diesem Thema. Diese Figur ersetzt keine fachliche Anlaufstelle.` : ""}`,
         };
       }
       return { text };
@@ -265,12 +272,22 @@ export function npcReply(npc: NpcDef, rawInput: string, save: SaveGame, turnCoun
 
   // 6) Fallback
   const fallbacks: Record<string, string[]> = {
-    mara: ["Hmm, das übersteigt meine Seekarten. Frag mich gern nach dem Meer, den Inseln, dem Wetter — oder 'Aufgabe' für Arbeit.", "Darauf hab ich keine Antwort im Logbuch. Aber wenn du was über Stürme, Strömungen oder die Archipele wissen willst: her damit."],
-    tove: ["Das muss ich mir in Ruhe durch den Kopf gehen lassen. Frag mich gern nach Übungen, nach dem Körper, nach allem, was unter die Haut geht.", "Da bin ich überfragt — aber wenn dir etwas in Glieder oder Herz fährt, dafür bin ich da."],
-    kaj: ["Keine Ahnung, ehrlich. Holz, Wellen, Wind — das sind meine Sprachen. Oder sag 'Aufgabe', dann machen wir was Handfestes.", "Versteh ich nicht ganz. Reden wir über dein Schiff? Darüber kann ich STUNDEN reden."],
-    ilse: ["Interessante Frage — außerhalb meines derzeitigen Korpus. Fragen Sie mich zum Nervensystem, zur Polyvagal-Theorie oder zu den Phänomenen.", "Dazu habe ich keine belastbaren Daten. Aber über Trauma-Forschung weiß ich Einiges."],
-    ben: ["Sorry, ich … da weiß ich nichts zu. Aber wenn du wissen willst, wie sich das alles ANFÜHLT, oder einfach jemanden am Feuer brauchst — dafür bin ich gut.", "Hm, das kann ich nicht beantworten. Aber zuhören kann ich. Immer."],
-  };
+  "mara": [
+    "Für diese Eingabe gibt es hier keine passende vorgefertigte Antwort. Du kannst nach der Spielwelt fragen, eine Antwortoption wählen oder das Gespräch schließen."
+  ],
+  "tove": [
+    "Für diese Eingabe gibt es hier keine passende vorgefertigte Antwort. Du kannst nach der Spielwelt fragen, eine Antwortoption wählen oder das Gespräch schließen."
+  ],
+  "kaj": [
+    "Für diese Eingabe gibt es hier keine passende vorgefertigte Antwort. Du kannst nach der Spielwelt fragen, eine Antwortoption wählen oder das Gespräch schließen."
+  ],
+  "ilse": [
+    "Für diese Eingabe gibt es hier keine passende vorgefertigte Antwort. Du kannst nach der Spielwelt fragen, eine Antwortoption wählen oder das Gespräch schließen."
+  ],
+  "ben": [
+    "Für diese Eingabe gibt es hier keine passende vorgefertigte Antwort. Du kannst nach der Spielwelt fragen, eine Antwortoption wählen oder das Gespräch schließen."
+  ]
+};
   return { text: pick(fallbacks[npc.id] ?? fallbacks.mara, turnCount + input.length) };
 }
 

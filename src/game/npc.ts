@@ -29,22 +29,22 @@ export const NPCS: NpcDef[] = [
     refersTo: { uebungen: "Tove", symptome: "Tove", wissenschaft: "Dr. Wiegand", gefuehle: "Ben" },
     greeting:
       "He da drüben! Neue Segel in meinem Hafen — das kommt selten genug vor. Ich bin Mara, Lotsin des Ankerplatzes. Ich kenne jede Strömung zwischen hier und dem Sturmherd.",
-    greetingAgain: "Wieder da, {name}? Die See hat dich also noch nicht satt. Gut so.",
+    greetingAgain: "Willkommen am Ankerplatz, {name}. Du bestimmst, wie lange du bleiben möchtest.",
     chips: ["Wie ist das Wetter?", "Was sind das für Inseln?", "Hast du eine Aufgabe für mich?", "Erzähl mir von diesem Meer"],
   },
   {
     id: "tove",
     name: "Tove",
-    role: "die Heilerin",
+    role: "die Übungssammlerin",
     color: 0x7fbf6a,
     x: 14,
     z: -22,
     domains: ["uebungen", "symptome", "gefuehle"],
     refersTo: { meer: "Mara", schiff: "Kaj", wissenschaft: "Dr. Wiegand" },
     greeting:
-      "Komm näher, setz dich einen Moment. Ich bin Tove. Ich sammle Übungen, die älter sind als jede Karte — Atem, Erde, Klang. Wenn dir die See mal in die Knochen fährt, komm zu mir.",
-    greetingAgain: "Schön, dass du wieder an Land gehst, {name}. Wie fühlt sich dein Körper heute an?",
-    chips: ["Was mache ich bei Panik?", "Erklär mir eine Übung", "Was ist ein Flashback?", "Hast du eine Aufgabe für mich?"],
+      "Ich bin Tove, eine Figur dieser Spielwelt. Ich sammle freiwillige Ideen für Spielaktionen. Du kannst sie lesen, auslassen oder das Gespräch schließen.",
+    greetingAgain: "Willkommen zurück, {name}. Möchtest du von den Spielaktionen lesen?",
+    chips: ["Wie wird Panik im Spiel dargestellt?", "Erklär mir eine Übung", "Was ist ein Flashback?", "Hast du eine Aufgabe für mich?"],
   },
   {
     id: "kaj",
@@ -56,8 +56,8 @@ export const NPCS: NpcDef[] = [
     domains: ["schiff", "meer"],
     refersTo: { uebungen: "Tove", symptome: "Tove", wissenschaft: "Dr. Wiegand", lore: "Mara" },
     greeting:
-      "Steht du da rum oder holst du Holz? Haha — Scherz, willkommen. Kaj, Schiffbauer. Dein Kahn ist gut, aber er könnte SCHNELLER sein. Treibholz schwimmt überall da draußen, du musst es nur einsammeln.",
-    greetingAgain: "{name}! Schon wieder Holz im Sinn? Ich mag das an dir.",
+      "Willkommen in meiner Werkstatt. Ich bin Kaj, der Schiffbauer dieser Geschichte. Wenn du möchtest, kannst du Treibholz sammeln und einen Ausbau wählen.",
+    greetingAgain: "Willkommen, {name}. Die Werkbank steht bereit, wenn du einen Ausbau wählen möchtest.",
     chips: ["Kannst du mein Schiff ausbauen?", "Wo finde ich Treibholz?", "Hast du eine Aufgabe für mich?"],
   },
   {
@@ -70,23 +70,23 @@ export const NPCS: NpcDef[] = [
     domains: ["wissenschaft", "symptome", "lore"],
     refersTo: { uebungen: "Tove", meer: "Mara", schiff: "Kaj", gefuehle: "Ben" },
     greeting:
-      "Ah — eine Phänomenautin, ein Phänomenaut! Verzeihen Sie, ich werde selten unterbrochen. Dr. Ilse Wiegand. Ich kartografiere, was dieses Meer wirklich ist: das Nervensystem, ausgebreitet als Archipel.",
-    greetingAgain: "Zurück von der Forschungsreise, {name}? Berichten Sie — jede Beobachtung zählt.",
+      "Ich bin Dr. Ilse Wiegand, eine erfundene Forscherin. Ich sortiere die Bilder dieser Seekarte. Die Inseln bilden kein Nervensystem ab und erlauben keine Untersuchung einer Person.",
+    greetingAgain: "Willkommen, {name}. Sie können von den erfundenen Landschaften lesen; Persönliches müssen Sie nicht berichten.",
     chips: ["Was ist das Nervensystem?", "Was bedeutet Polyvagal?", "Was ist das Toleranzfenster?", "Hast du eine Aufgabe für mich?"],
   },
   {
     id: "ben",
     name: "Ben",
-    role: "der Überlebende",
+    role: "die Figur am Feuer",
     color: 0x6a8fc9,
     x: -30,
     z: 14,
     domains: ["gefuehle", "symptome"],
     refersTo: { uebungen: "Tove", wissenschaft: "Dr. Wiegand", meer: "Mara", schiff: "Kaj" },
     greeting:
-      "Oh — hallo. Ich bin Ben. Ich war mal da draußen, auf See. Dann hat mich … etwas eingeholt. Seitdem sitze ich hier am Feuer und schaue aufs Wasser. Es ist schön hier. Meistens.",
-    greetingAgain: "{name} … schön, dass du wieder da bist. Ehrlich. Es wird leiser hier, wenn jemand da ist.",
-    chips: ["Wie geht es dir?", "Was ist dir passiert?", "Ich bringe dir etwas von Tove", "Hast du eine Aufgabe für mich?"],
+      "Hallo, ich bin Ben. Als Figur dieser Geschichte sitze ich gern am Feuer und schaue aufs Wasser. Meine Texte sind erfunden; ich spreche nicht für reale Betroffene.",
+    greetingAgain: "Willkommen am Feuer, {name}. Du kannst bleiben oder weitergehen, ohne mir etwas erzählen zu müssen.",
+    chips: ["Wie geht es dir?", "Was erzählt deine Spielgeschichte?", "Ich bringe dir etwas von Tove", "Hast du eine Aufgabe für mich?"],
   },
   {
     id: "vessa",
@@ -98,8 +98,8 @@ export const NPCS: NpcDef[] = [
     domains: ["meer"],
     refersTo: { schiff: "Kaj", lore: "Mara" },
     greeting:
-      "Ah — die Kapitänin persönlich. Nach unserem kleinen Geschäft handle ich nur noch ehrlich: Karten, Knoten, Seemannsgarn. Was darf es sein?",
-    greetingAgain: "Wieder da? Du siehst mich immer noch durch, oder? Gut so. Was brauchst du?",
+      "Willkommen an meinem Stand. Ich bin Vessa, eine erfundene Händlerin. Du kannst Karten, Knoten und Seemannsgarn ansehen oder weitergehen.",
+    greetingAgain: "Willkommen zurück. Möchtest du etwas ansehen oder lieber weiterreisen?",
     chips: ["Was verkaufst du?", "Erzähl von deinen Reisen"],
   },
 ];

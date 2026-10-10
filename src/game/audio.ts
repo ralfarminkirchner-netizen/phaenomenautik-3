@@ -6,11 +6,13 @@ class AudioEngine {
   private master: GainNode | null = null;
   private noiseGain: GainNode | null = null;
   private windGain: GainNode | null = null;
-  private muted = false;
+  private muted = true;
+  private paused = false;
+  private transition: Promise<void> = Promise.resolve();
   private ambientStarted = false;
 
   private ensure(): AudioContext | null {
-    if (typeof window === "undefined") return null;
+    if (typeof window === "undefined" || this.paused) return null;
     if (!this.ctx) {
       const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       if (!AC) return null;
@@ -19,17 +21,35 @@ class AudioEngine {
       this.master.gain.value = this.muted ? 0 : 0.5;
       this.master.connect(this.ctx.destination);
     }
-    if (this.ctx.state === "suspended") void this.ctx.resume();
+    if (this.ctx.state === "suspended") void this.ctx.resume().catch(() => {});
     return this.ctx;
   }
 
   setMuted(m: boolean) {
     this.muted = m;
     if (this.master && this.ctx) {
-      this.master.gain.linearRampToValueAtTime(m ? 0 : 0.5, this.ctx.currentTime + 0.2);
+      this.master.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.master.gain.linearRampToValueAtTime(m || this.paused ? 0 : 0.5, this.ctx.currentTime + 0.2);
     }
   }
   get isMuted() { return this.muted; }
+
+  setPaused(paused: boolean) {
+    if (this.paused === paused) return;
+    this.paused = paused;
+    const ctx = this.ctx;
+    if (!ctx) return;
+    if (this.master) {
+      this.master.gain.cancelScheduledValues(ctx.currentTime);
+      this.master.gain.setValueAtTime(paused || this.muted ? 0 : 0.5, ctx.currentTime);
+    }
+    this.transition = this.transition.then(async () => {
+      if (ctx.state === "closed") return;
+      if (this.paused && ctx.state === "running") await ctx.suspend();
+      else if (!this.paused && ctx.state === "suspended") await ctx.resume();
+    }).catch(() => {});
+  }
+  get isPaused() { return this.paused; }
 
   /** Meeres-Ambiente starten: gefiltertes Rauschen + langsamer Swell */
   startSea() {
@@ -85,7 +105,7 @@ class AudioEngine {
 
   /** 0 = ruhig, 1 = voller Sturm */
   setStormIntensity(v: number) {
-    if (!this.ctx || !this.windGain || !this.noiseGain) return;
+    if (this.paused || !this.ctx || !this.windGain || !this.noiseGain) return;
     const t = this.ctx.currentTime;
     this.windGain.gain.linearRampToValueAtTime(v * 0.14, t + 0.8);
     this.noiseGain.gain.linearRampToValueAtTime(0.1 + v * 0.12, t + 0.8);

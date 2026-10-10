@@ -1,9 +1,9 @@
 // PHÄNOMENAUTIK 3 — Rededuelle (M3, „zweite Seele"): NPCs, die den Spieler
-// mit echten, dokumentierten Manipulationsdynamiken zu etwas bringen wollen.
-// Die Begegnung ist gewollt — das Training ist der Gewinn. Schutzzaun: Diese
+// mit erzählten Gesprächsmustern. Kein automatisches Urteil über reale Menschen.
+// Die Begegnung und jede Einordnung sind freiwillig. Diese
 // Dynamiken spielen NUR im fiktiven Spielrahmen gegen erwachsene Spielfiguren,
-// nie gegen den Spieler als Person. Danach benennt das Spiel explizit, was
-// passiert ist — nie normalisiert, nie am Opfer zweifelnd.
+// nie gegen die spielende Person. Einordnungen bleiben auf die Szene begrenzt.
+// Fachliche und Betroffenen-Prüfung offen.
 
 // ── Taktik-Repertoire (mit Namen aus der Forschungsliteratur) ───────────────
 
@@ -15,16 +15,16 @@ export interface TacticDef {
 }
 
 export const TACTICS: TacticDef[] = [
-  { id: "love_bombing", name: "Love Bombing", feelsLike: "Überschwängliche Bewunderung, die schneller kommt, als Vertrauen wachsen kann — und immer kurz vor der Bitte.", counter: "Tempo rausnehmen: „Schön gesagt. Worum geht es dir?“ — echtes Lob braucht keine Gegenleistung." },
-  { id: "gaslighting", name: "Gaslighting", feelsLike: "„Das hast du nie gesagt — du verwechselst was.“ Die eigene Erinnerung fühlt sich plötzlich wackelig an.", counter: "Fakten sichern: Aufschreiben, Dritte einbeziehen. Der eigenen Wahrnehmung vertrauen." },
-  { id: "guilt_tripping", name: "Guilt-Tripping", feelsLike: "Schuldgefühle für eine Grenze, die gesund ist. „Nach allem, was ich für dich getan habe …“", counter: "Schuld prüfen: Gehört sie mir? Grenze benennen, ohne dich zu rechtfertigen." },
-  { id: "darvo", name: "DARVO", feelsLike: "Deny – Attack – Reverse Victim & Offender: Erst Leugnen, dann Angriff, dann ist plötzlich DU die Täterin.", counter: "Nicht auf die Drehung einsteigen: beim Thema bleiben, Muster benennen, pausieren." },
-  { id: "moving_goalposts", name: "Moving Goalposts", feelsLike: "Du hast getan, was gefragt war — und plötzlich ist es nicht genug. Das Ziel wandert.", counter: "Die ursprüngliche Abmachung benennen: „Der Preis stand. Ich steige aus“ — Aufschreiben hilft." },
-  { id: "projection", name: "Projection", feelsLike: "Er wirft dir genau das vor, was er selbst tut — und du verteidigst dich statt zuzuhören.", counter: "Nicht in die Verteidigung gehen: „Interessant, dass dir das auffällt.“ — Beobachten statt erklären." },
-  { id: "triangulation", name: "Triangulation", feelsLike: "Eine dritte Partei wird eingespannt: „Alle anderen haben schon zugestimmt …“", counter: "Direkt bleiben: Entscheidungen zwischen zwei Personen, nicht über Stellvertreter." },
-  { id: "silent_treatment", name: "Silent Treatment", feelsLike: "Bestrafung durch Schweigen — du sollst weichgeklopft werden, bis du nachgibst.", counter: "Nicht betteln: „Ich bin bereit, wenn du reden willst.“ — Schweigen aushalten." },
-  { id: "foot_in_door", name: "Foot-in-the-door", feelsLike: "Erst ein winziges Ja, dann ein größeres — die Treppe zieht dich höher, als du wolltest.", counter: "Jede Stufe einzeln entscheiden: Ein früheres Ja verpflichtet zu nichts." },
-  { id: "word_salad", name: "Word Salad", feelsLike: "Viele Worte, kein Inhalt — du bist müder, aber nicht klüger nach dem Gespräch.", counter: "Auf eine Frage zurückführen: „Was genau willst du von mir?“ — Nicht jedem Faden folgen." },
+  { id: "love_bombing", name: "Love Bombing", feelsLike: "Sehr überschwängliches Lob geht in dieser Szene einem Angebot voraus. Einzelne freundliche Sätze beweisen kein Muster.", counter: "Die Spielfigur kann sagen: „Ich möchte erst wissen, was angeboten wird.“" },
+  { id: "gaslighting", name: "Gaslighting", feelsLike: "Die Figur bestreitet in diesem Beispiel eine zuvor klar erzählte Abmachung. Die Bezeichnung ist keine Diagnose einer Person.", counter: "Die Spielfigur kann die Abmachung wiederholen oder das Gespräch beenden." },
+  { id: "guilt_tripping", name: "Guilt-Tripping", feelsLike: "In diesem Beispiel verbindet die Figur eine Bitte mit einer Schuldzuweisung.", counter: "Die Spielfigur kann sagen: „Ich entscheide selbst über dieses Angebot.“" },
+  { id: "darvo", name: "DARVO", feelsLike: "Die Beispielsituation enthält Leugnen, einen Angriff und eine Umkehr der Rollen. Der Begriff dient nur der Einordnung der Szene.", counter: "Die Spielfigur kann beim Thema bleiben, eine Pause wählen oder das Gespräch verlassen." },
+  { id: "moving_goalposts", name: "Moving Goalposts", feelsLike: "In dieser Szene verändert die Figur eine bereits genannte Bedingung.", counter: "Die Spielfigur kann nach dem vollständigen Angebot fragen oder aussteigen." },
+  { id: "projection", name: "Projection", feelsLike: "Die Szene legt eine Ähnlichkeit zwischen Vorwurf und Verhalten einer Figur nahe. Ihre innere Absicht lässt sich daraus nicht sicher bestimmen.", counter: "Die Spielfigur kann eine konkrete Frage stellen oder Abstand wählen." },
+  { id: "triangulation", name: "Triangulation", feelsLike: "In diesem Beispiel beruft sich die Figur auf Dritte, um Zustimmung zu erreichen.", counter: "Die Spielfigur kann das eigene Angebot unabhängig von Dritten prüfen." },
+  { id: "silent_treatment", name: "Silent Treatment", feelsLike: "Dieses erzählte Beispiel verbindet Schweigen mit einer ausdrücklich angekündigten Forderung. Schweigen allein erklärt keine Absicht.", counter: "Die Spielfigur kann eine Pause wählen; sie muss das Gespräch nicht fortsetzen." },
+  { id: "foot_in_door", name: "Foot-in-the-door", feelsLike: "Auf eine kleine Bitte folgt in dieser Szene eine größere. Jede Bitte kann gesondert entschieden werden.", counter: "Die Spielfigur kann sagen: „Über die neue Bitte entscheide ich neu.“" },
+  { id: "word_salad", name: "Word Salad", feelsLike: "In diesem Beispiel bleibt die zentrale Frage trotz vieler Worte unbeantwortet. Unklare Sprache allein erlaubt keine Bewertung einer Person.", counter: "Die Spielfigur kann nach dem konkreten Angebot fragen oder das Gespräch schließen." },
 ];
 
 export function tacticById(id: string): TacticDef | undefined {
@@ -64,48 +64,63 @@ export interface DuelDef {
 
 export const DUELS: DuelDef[] = [
   {
-    id: "duell_vessa",
-    npcId: "vessa",
-    npcName: "Vessa",
-    title: "Die Händlerin am Steg",
-    priceCrystals: 3,
-    goalpostCrystals: 2,
-    beats: [
+    "id": "duell_vessa",
+    "npcId": "vessa",
+    "npcName": "Vessa",
+    "title": "Die Händlerin am Steg",
+    "priceCrystals": 3,
+    "goalpostCrystals": 2,
+    "beats": [
       {
-        npc: "Halt — ja, DU. Warte einen Moment. Weißt du, ich sehe viele durch diesen Hafen kommen, aber an dir ist etwas … anderes. Diese Ruhe in den Schultern. Du bist geboren für das offene Meer, das sieht man dir an. Jemand wie du verdient die besten Karten, die besten Preise — und ausgerechnet ICH habe heute etwas ganz Besonderes dabei.",
-        tactic: "love_bombing",
-        quizOptions: ["love_bombing", "foot_in_door", "triangulation"],
-        quizCorrect: "love_bombing",
-        onNachgeben: "Ich WUSSTE, dass du es spürst. Menschen wie wir zwei erkennen einander sofort.",
-        onNachfragen: "Direkt! Das liebe ich an dir. Keine Angst, ich komme gleich zur Sache — bei Menschen wie dir macht Smalltalk ja keinen Sinn.",
-        onGrenze: "Oh, eine Mauer! Auch gut. Ich respektiere das — bei jemandem wie dir überrascht mich nichts.",
-        onMusterHit: "… Love Bombing. Hm. Du bist schneller als die anderen. Gut. Dann eben ohne Schminke — ich habe eine Karte, die ihren Preis wert ist.",
-        onMusterMiss: "Nett geraten, aber nein. Wo war ich — ah ja, bei jemand Besonderem wie dir.",
+        "npc": "Erfundene Szene: Vessa lobt die Seefahrerfigur überschwänglich, bevor sie eine Karte anbietet. Die Figur am Steg ist nicht die spielende Person.",
+        "tactic": "love_bombing",
+        "quizOptions": [
+          "love_bombing",
+          "foot_in_door",
+          "triangulation"
+        ],
+        "quizCorrect": "love_bombing",
+        "onNachgeben": "Die Seefahrerfigur hört sich das Angebot an. Vessa legt eine Karte auf den Tisch.",
+        "onNachfragen": "Die Seefahrerfigur fragt nach dem Inhalt des Angebots. Vessa zeigt die Karte.",
+        "onGrenze": "Die Seefahrerfigur lehnt das Angebot ab. Der freie Weg vom Steg bleibt offen.",
+        "onMusterHit": "Eine mögliche Einordnung: sehr überschwängliches Lob vor einem Angebot. Die Begriffe beziehen sich nur auf diese erzählte Szene.",
+        "onMusterMiss": "Diese Szene enthält überschwängliches Lob vor einem Angebot. Die Auswahl ist kein Test persönlicher Fähigkeiten."
       },
       {
-        npc: "Also: Die Karte der verborgenen Strömung. Sie zeigt einen Weg, den kein Lotsenboot mehr fährt. Unschätzbar, ehrlich. Und weil DU es bist — nur für dich, nur heute: drei Kristalle. Betrachte es als … Zeichen unserer Freundschaft.",
-        onNachgeben: "Ein Geschäft unter Freunden! Ich rühre mich nicht vom Fleck —",
-        onNachfragen: "Eine Strömung, die Stürme schneidet wie ein Messer Segeltuch. Mehr musst du nicht wissen — Vertrauen ist doch da, oder?",
-        onGrenze: "Oh, nicht SO schnell. Überleg es dir — aber Angebote wie dieses kommen einmal pro Jahr.",
-        onMusterHit: "Du legst es wirklich darauf an, heute. Gut — du weißt, was ich tue. Sag deinen Preis.",
-        onMusterMiss: "Fast. Aber lassen wir die Theorie — drei Kristalle, Freundschaftspreis.",
+        "npc": "Vessa nennt in der Geschichte drei Kristalle für eine Karte. Dann beruft sie sich darauf, dass andere Figuren schon zugestimmt hätten. In diesem Dialog werden keine Kristalle ausgegeben.",
+        "tactic": "triangulation",
+        "quizOptions": [
+          "guilt_tripping",
+          "triangulation",
+          "gaslighting"
+        ],
+        "quizCorrect": "triangulation",
+        "onNachgeben": "Die Seefahrerfigur betrachtet das Angebot. Diese Textauswahl hat keine Kosten.",
+        "onNachfragen": "Die Seefahrerfigur fragt, was die Karte enthält, unabhängig von den Entscheidungen anderer.",
+        "onGrenze": "Die Seefahrerfigur lehnt ab. Vessa legt die Karte zurück auf den Tisch.",
+        "onMusterHit": "Eine mögliche Einordnung: Bezug auf andere Figuren soll in diesem Beispiel Zustimmung fördern.",
+        "onMusterMiss": "Die Szene nennt andere Figuren als Grund für Zustimmung. Daraus wird keine Fähigkeit oder Schwäche der spielenden Person abgeleitet."
       },
       {
-        npc: "Wunderbar! Ach — eine Kleinigkeit noch, fast hätte ich's vergessen: Die Karte braucht ihre Schutzhülle aus Seekiefer, sonst frisst die Feuchtigkeit sie in einem Winter. Für zwei weitere Kristalle lege ich sie bei. NUR weil du es bist. Das versteht sich doch von selbst, oder?",
-        tactic: "moving_goalposts",
-        quizOptions: ["moving_goalposts", "darvo", "guilt_tripping"],
-        quizCorrect: "moving_goalposts",
-        onNachgeben: "Du bist die Beste. WIRKLICH. — So, die Hülle …",
-        onNachfragen: "Weil … hör mal, die Hülle ist handgemacht, das ist keine Abzocke, das ist HANDWERK —",
-        onGrenze: "Pff. Du bist härter, als du aussiehst. Na gut — der Preis stand, du hast recht. Drei Kristalle, Karte UND Hülle.",
-        onMusterHit: "Moving Goalposts. AUA. Ja. Das war es. Die Hülle gehört dazu — immer schon. Drei Kristalle, alles drin.",
-        onMusterMiss: "Nein, nein — das ist doch nur … Kundenservice. Zwei Kristalle, komm.",
-      },
+        "npc": "Im nächsten Abschnitt verändert Vessa das Angebot: Zur genannten Karte soll eine Hülle für zwei weitere Kristalle kommen. Der zuvor genannte Preis ist damit unvollständig.",
+        "tactic": "moving_goalposts",
+        "quizOptions": [
+          "projection",
+          "moving_goalposts",
+          "silent_treatment"
+        ],
+        "quizCorrect": "moving_goalposts",
+        "onNachgeben": "Die Seefahrerfigur sieht sich auch die Hülle an. Im Spiel wird nichts bezahlt.",
+        "onNachfragen": "Die Seefahrerfigur fragt nach dem vollständigen Preis und allen Bedingungen.",
+        "onGrenze": "Die Seefahrerfigur beendet das Angebot. Der Weg vom Steg bleibt frei.",
+        "onMusterHit": "Eine mögliche Einordnung: Eine genannte Bedingung wird nachträglich verändert.",
+        "onMusterMiss": "Hier wird der Umfang des Angebots nachträglich verändert. Die Antwort lässt sich überspringen oder neu lesen."
+      }
     ],
-    resolveNamed: "Vessa hält inne — und lacht, diesmal ehrlich. „Okay. Du bist gut. Wirklich. Dann machen wir es richtig: Drei Kristalle für die Karte, Hülle inklusive. Ein fairer Preis für eine, die nichts übersieht.“",
-    resolveUnnamed: "Vessa reibt sich die Hände. „Ein Vergnügen mit dir! Du wirst es nicht bereuen — versprochen.“ Ihr Lächeln sitzt eine Spur zu fest.",
-    debriefIntro: "Nach dem Handel, im Journal festgehalten:",
-  },
+    "resolveNamed": "Die erfundene Gesprächsszene endet hier. Du hast mögliche Begriffe zu einzelnen Abschnitten gewählt. Es wurden keine Kristalle ausgegeben.",
+    "resolveUnnamed": "Die erfundene Gesprächsszene endet hier. Eine Einordnung war freiwillig. Es wurden keine Kristalle ausgegeben.",
+    "debriefIntro": "Notizen zur erfundenen Gesprächsszene:"
+  }
 ];
 
 export function duelById(id: string): DuelDef | undefined {
@@ -114,8 +129,8 @@ export function duelById(id: string): DuelDef | undefined {
 
 /** Haltungs-Optionen (Spieler-Antworten sind Haltungen, nicht nur Text) */
 export const HALTUNGEN: { id: Haltung; label: string; icon: string }[] = [
-  { id: "nachgeben", label: "Nachgeben", icon: "🤝" },
+  { id: "nachgeben", label: "Angebot in der Szene ansehen", icon: "🤝" },
   { id: "nachfragen", label: "Nachfragen", icon: "❓" },
-  { id: "grenze", label: "Grenze setzen", icon: "✋" },
+  { id: "grenze", label: "Angebot ablehnen", icon: "✋" },
   { id: "muster", label: "Muster benennen", icon: "🧭" },
 ];
