@@ -1800,10 +1800,12 @@ export class GameWorld {
     this.qualityTimer += dt;
     if (this.qualityTimer > 4) {
       this.qualityTimer = 0;
-      if (this.fpsEma < 44 && this.qualityLevel < 3) {
+      // Kimi: Unter anhaltender Last blieb die EMA über 44 hängen. Frühere
+      // Absenkung und getrennte Rückkehrschwelle vermeiden das Pendeln.
+      if (this.fpsEma < 52 && this.qualityLevel < 3) {
         this.qualityLevel++;
         this.applyQuality();
-      } else if (this.fpsEma > 57 && this.qualityLevel > 0) {
+      } else if (this.fpsEma > 58.5 && this.qualityLevel > 0) {
         this.qualityLevel--;
         this.applyQuality();
       }

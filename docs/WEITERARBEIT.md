@@ -8,6 +8,16 @@ Die ursprüngliche Arbeitskopie `/Volumes/ThunderBolt4_2TB/Development/Projects/
 
 Der erste zusammenhängende Ausbau enthält Flimmerbucht, Werkhafen und Stillen Strand. Alle sind ohne Freischaltung erreichbar; die Segelhilfe ist optional. Gemeinsame Zeit, Wetter, Wind, Wasserfelder, Licht und Klang beeinflussen Boot und Begegnungen. Buchtversuche, getrennte Zeugenaussagen, gezielte Mitteilungen und begrenzte Materialien im Hafen sowie aktuelle Einladungen am Strand haben konkrete Zustandsfolgen. Beobachtungsnotizen trennen festgehaltene Tatsachen von eigener Deutung und bewahren frühere Formulierungen bei Revisionen. Freies Segeln ist der Haupteinstieg; ruhiges Ankommen und Reflexion bleiben freiwillig. Issue #2 ist damit noch nicht vollständig umgesetzt.
 
+## Gemeinsamer Ausbau statt doppelter Varianten
+
+Am 10. Oktober wurde der inzwischen gepushte Branch `kimi/open-world-20261010` gegen diesen Arbeitsbranch geprüft. Kimi dokumentiert in `4d3e148` die Übernahme des damaligen, noch uncommitteten Codex-Ausbaus. Weltmodell, Festzeitschritt, drei Raumdarstellungen, Schiffsfelder und Atlas-Dokumentation sind auf beiden Seiten identisch; das sind dieselben Systeme, keine zwei unabhängig gebauten Spiele.
+
+Kimis zusätzliche Qualitätsleiter aus `073469e` senkt die Darstellungsqualität unter 52 FPS und erhöht sie erst über 58,5 FPS. Sie wird hier unter Erhalt beider Git-Historien zusammengeführt. Die späteren Codex-Reparaturen an Anker, Ortskamera, Eingabefokus, Wasserreflexion und Importprüfung bleiben erhalten. Zusammenführung und spätere Änderungen gehen weiterhin über Draft-PR #3; `main` wird nicht direkt verändert.
+
+Parallel existiert die Aufgabe „Phänomenautik neu entwerfen“ mit der eigenen App „Feldbuch“ im KiNTEGRiTY-Variantenraum (lokal `http://127.0.0.1:5187/?variante=gpt-6`). Diese Aufgabe verantwortet die Konzept-/Forschungsbuchvariante. Hier wird das vorhandene Segelspiel fortgesetzt. Keine zweite allgemeine Forschungsbuch-, Linsen- oder Chat-App in diesem Repository beginnen. Spielbeobachtungen erst über tatsächlich vorhandene Verträge anschließen.
+
+Nächster gemeinsamer Schritt im Spiel: vorhandene Flimmerbucht-Begegnung, Mara/Tove, Inventar und Journal mit den neuen Raumfolgen verbinden. Erst danach weitere Strömungs-/Resonanzräume ausbauen. Vor jedem neuen System beide gepushten Branches vergleichen; ungesyncte Arbeit auf dem anderen Mac bleibt ausdrücklich unbekannt.
+
 ## Einrichten, starten, prüfen
 
 Die Ortswahl ankert das Boot vorübergehend; die Welt läuft weiter. Die erste Segelsteuerung löst den Anker und die Ortskamera. Ein Neuladen bewahrt Position, Ortsblick und passende Ortsaktionen.
@@ -41,7 +51,7 @@ Der tatsächliche Atlas-Anschluss unterstützt bisher nur Flimmerbucht. Atlas-UR
 
 1. Bildrate und räumliche Lesbarkeit verbessern und längeres freies Segeln bei wechselndem Wetter prüfen. Die erste Browserprüfung ist im Prüfprotokoll festgehalten; sie ist keine menschliche Gestaltungs- oder Klangabnahme.
 2. Den wirklichen Atlas-Rückweg mit dem Atlas-Projekt koordinieren, ohne eine allgemeine Schnittstelle vorzutäuschen.
-3. Strömungs- und Resonanzbereich gemäß Issue #2 an denselben Weltzustand anschließen, anschließend weitere situationsabhängige Begegnungen und nachvollziehbare Zusammenhänge ausbauen.
+3. Zuerst vorhandene Begegnungs-, NPC-, Inventar- und Journalwege mit den neuen Raumfolgen verbinden; anschließend Strömungs- und Resonanzbereich gemäß Issue #2 an denselben Weltzustand anschließen.
 
 Bei jedem Rechnerwechsel diese Datei aktualisieren. Zuerst `git status`, Branch, Remote und lokale Änderungen prüfen. Zusammengehörige eigene Änderungen gezielt committen und pushen; auf dem anderen Mac erst nach Bestandsprüfung übernehmen. Bei gleichzeitiger Arbeit getrennte Branches und Pull Requests verwenden. Kein blindes Pull, automatisches Stash, Reset, pauschales `git add -A`, Force-Push oder Umschreiben gemeinsamer Historie.
 
