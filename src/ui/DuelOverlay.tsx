@@ -1,256 +1,92 @@
-// PHÄNOMENAUTIK 3 — Rededuell-Overlay (M3): Typewriter-Zeilen des NPC,
-// Haltungs-Optionen statt Freitext, Muster-Radar (Taktik benennen aus 3
-// Optionen), Debrief mit klarer Rahmung. Keine Bestrafung fürs Nichterkennen.
-
-import { useEffect, useRef, useState } from "react";
+// Optional narrated examples. A choice only changes the fictional scene.
+import { useEffect, useState } from "react";
 import { store } from "../game/store";
 import { getWorld } from "../game/runtime";
 import { duelById, tacticById, HALTUNGEN, type DuelDef, type Haltung } from "../game/duels";
 import { audio } from "../game/audio";
+import { areUiTimersPaused, useInterfacePaused, usePausedTypewriter } from "./usePausedTimers";
 
-function Typewriter({ text, onDone }: { text: string; onDone?: () => void }) {
-  const [shown, setShown] = useState("");
-  useEffect(() => {
-    setShown("");
-    let i = 0;
-    const iv = setInterval(() => {
-      i += 2;
-      setShown(text.slice(0, i));
-      if (i >= text.length) {
-        clearInterval(iv);
-        onDone?.();
-      }
-    }, 13);
-    return () => clearInterval(iv);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text]);
-  return (
-    <span onClick={() => setShown(text)}>
-      {shown}
-      {shown.length < text.length && <span className="animate-pulse">▊</span>}
-    </span>
-  );
+function Typewriter({ text }: { text: string }) {
+  const { shown, reveal } = usePausedTypewriter(text);
+  return <span onClick={reveal}>{shown}</span>;
 }
-
 export function DuelOverlay() {
   const [duelId, setDuelId] = useState(store.get().duelId);
   useEffect(() => store.subscribe(() => setDuelId(store.get().duelId)), []);
-  if (!duelId) return null;
-  const def = duelById(duelId);
-  if (!def) return null;
-  return <DuelInner key={def.id} def={def} />;
+  const def = duelId ? duelById(duelId) : undefined;
+  return def ? <DuelInner key={def.id} def={def} /> : null;
 }
-
-type Phase =
-  | { kind: "beat"; idx: number }
-  | { kind: "quiz"; idx: number }
-  | { kind: "resolve" }
-  | { kind: "debrief" };
-
+type Phase = { kind: "beat" | "quiz" | "reply"; idx: number } | { kind: "resolve" | "debrief" };
 function DuelInner({ def }: { def: DuelDef }) {
   const world = getWorld()!;
+  const paused = useInterfacePaused();
   const [phase, setPhase] = useState<Phase>({ kind: "beat", idx: 0 });
   const [npcLine, setNpcLine] = useState(def.beats[0].npc);
   const [named, setNamed] = useState<string[]>([]);
-  const [paid, setPaid] = useState(0);
-  const [missed, setMissed] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const beat = phase.kind === "beat" || phase.kind === "quiz" ? def.beats[(phase as { idx: number }).idx] : null;
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 999999, behavior: "smooth" });
-  }, [npcLine, phase]);
-
-  const close = () => {
-    world.finishDuel(def.id);
-    store.set({ duelId: null });
-  };
-
-  const learnTactic = (tacticId: string) => {
-    if (!named.includes(tacticId)) {
-      setNamed((n) => [...n, tacticId]);
-      world.addCompassEntry(tacticId);
-    }
-  };
-
-  const choose = (h: Haltung) => {
-    if (phase.kind !== "beat" || !beat) return;
-    const idx = phase.idx;
-    audio.select();
-    if (h === "muster") {
-      if (beat.tactic && beat.quizOptions) {
-        setPhase({ kind: "quiz", idx });
-      } else {
-        setNpcLine("Da ist nichts zu benennen — noch nicht. Hör weiter zu.");
-      }
+  const [note, setNote] = useState("");
+  const beat = "idx" in phase ? def.beats[phase.idx] : null;
+  const close = () => { if (!areUiTimersPaused()) store.set({ duelId: null }); };
+  const finish = () => { if (areUiTimersPaused()) return; world.finishDuel(def.id); store.set({ duelId: null }); };
+  const choose = (choice: Haltung) => {
+    if (areUiTimersPaused() || phase.kind !== "beat" || !beat) return;
+    audio.select(); setNote("");
+    if (choice === "muster") {
+      if (beat.quizOptions) setPhase({ kind: "quiz", idx: phase.idx });
+      else { setNpcLine("In diesem Abschnitt ist kein bestimmtes Muster hinterlegt. Du kannst die Szene weiter lesen."); setPhase({ kind: "reply", idx: phase.idx }); }
       return;
     }
-    // Haltung wirkt
-    if (h === "nachgeben") {
-      if (idx === 1) {
-        // Kaufangebot annehmen
-        if (world.duelPay(def.priceCrystals)) setPaid((p) => p + def.priceCrystals);
-        else {
-          setNpcLine("Oh — deine Taschen sind leerer als dein Blick. Schade. Komm wieder, wenn du dir Freundschaft leisten kannst.");
-          return;
-        }
-      } else if (idx === 2) {
-        if (world.duelPay(def.goalpostCrystals)) setPaid((p) => p + def.goalpostCrystals);
-        else {
-          setNpcLine("Keine Kristalle mehr? Dann eben nur die Karte. Die Hülle hebe ich mir für … zahlungskräftigere Freunde auf.");
-          advanceOrResolve(idx);
-          return;
-        }
-      }
-    }
-    const reply =
-      h === "nachgeben" ? beat.onNachgeben : h === "nachfragen" ? beat.onNachfragen : beat.onGrenze;
-    if (reply) setNpcLine(reply);
-    // Grenze immer, sonst ab dem Angebots-Beat: nach der Antwort → weiter
-    if (h === "grenze" || idx >= 1) {
-      window.setTimeout(() => advanceOrResolve(idx), 900);
-    }
+    const reply = choice === "nachgeben" ? beat.onNachgeben : choice === "nachfragen" ? beat.onNachfragen : beat.onGrenze;
+    setNpcLine(reply ?? "Die Szene hält hier einen Moment inne.");
+    setPhase({ kind: "reply", idx: phase.idx });
   };
-
-  const advanceOrResolve = (idx: number) => {
-    if (idx + 1 < def.beats.length) {
-      const next = idx + 1;
-      setPhase({ kind: "beat", idx: next });
-      setNpcLine(def.beats[next].npc);
-    } else {
-      // Auflösungstext: benannt = fair, unbenannt = teuer
-      const resolved = named.length > 0;
-      if (resolved) {
-        // Fairer Handel: bezahlt bleibt bezahlt, Rest zurück
-        world.duelSettle("named", paid, def.priceCrystals);
-        setNpcLine(def.resolveNamed);
-      } else {
-        world.duelSettle("unnamed", paid, def.priceCrystals + def.goalpostCrystals);
-        setNpcLine(def.resolveUnnamed);
-      }
-      setPhase({ kind: "resolve" });
-    }
+  const next = () => {
+    if (areUiTimersPaused() || phase.kind !== "reply") return;
+    setNote("");
+    const index = phase.idx + 1;
+    if (index < def.beats.length) { setNpcLine(def.beats[index].npc); setPhase({ kind: "beat", idx: index }); }
+    else { setNpcLine(named.length ? def.resolveNamed : def.resolveUnnamed); setPhase({ kind: "resolve" }); }
   };
-
-  const quizAnswer = (option: string) => {
-    if (phase.kind !== "quiz" || !beat) return;
+  const quizAnswer = (answer: string) => {
+    if (areUiTimersPaused() || phase.kind !== "quiz" || !beat) return;
     audio.select();
-    if (option === beat.quizCorrect && beat.tactic) {
-      learnTactic(beat.tactic);
-      setMissed(false);
-      setNpcLine(beat.onMusterHit ?? "…");
-      const idx = phase.idx;
-      window.setTimeout(() => advanceOrResolve(idx), 1400);
-      setPhase({ kind: "beat", idx });
+    if (answer === beat.quizCorrect) {
+      if (!named.includes(answer)) { setNamed((list) => [...list, answer]); world.addCompassEntry(answer); }
+      setNpcLine(beat.onMusterHit ?? "Diese Bezeichnung ist für die Szene hinterlegt.");
+      setNote("Eine mögliche Einordnung dieser erfundenen Szene.");
     } else {
-      setMissed(true);
-      setNpcLine(beat.onMusterMiss ?? "…");
-      setPhase({ kind: "beat", idx: phase.idx });
+      setNpcLine(beat.onMusterMiss ?? "Für diese Szene ist eine andere Bezeichnung hinterlegt.");
+      setNote("Einzelne Sätze reichen nicht aus, um reale Menschen oder Beziehungen zu beurteilen.");
     }
+    setPhase({ kind: "reply", idx: phase.idx });
   };
-
-  const namedTacticDefs = named.map((id) => tacticById(id)).filter((t) => !!t);
-
-  return (
-    <div className="absolute inset-0 z-30 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center pointer-events-auto p-4">
-      <div className="w-full max-w-xl rounded-2xl border border-purple-300/25 bg-[#171226] shadow-2xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 bg-black/30">
-          <div>
-            <div className="text-[10px] uppercase tracking-widest text-purple-300/70">Rededuell · {def.title}</div>
-            <div className="text-amber-100 font-bold">{def.npcName}</div>
-          </div>
-          <div className="text-[11px] text-white/40" title="Benannte Muster">
-            {named.length > 0 && `🧭 ${named.length} Muster benannt`}
-          </div>
-        </div>
-
-        <div ref={scrollRef} className="px-5 py-4 min-h-[130px] max-h-[42vh] overflow-y-auto">
-          <p className="text-white/90 leading-relaxed text-[15px]">
-            <Typewriter text={npcLine} />
-          </p>
-          {missed && (
-            <p className="text-white/40 text-xs mt-2 italic">Kein Treffer — aber das Benennen zu versuchen ist schon Übung.</p>
-          )}
-        </div>
-
-        {phase.kind === "beat" && (
-          <div className="px-5 pb-4 grid grid-cols-2 gap-2">
-            {HALTUNGEN.map((h) => (
-              <button
-                key={h.id}
-                onClick={() => choose(h.id)}
-                className={`rounded-xl border px-3 py-2.5 text-sm transition text-left ${
-                  h.id === "muster"
-                    ? "border-purple-400/40 bg-purple-900/30 text-purple-100 hover:bg-purple-800/40"
-                    : "border-white/15 bg-white/5 text-white/85 hover:bg-white/10"
-                }`}
-              >
-                <span className="mr-1.5">{h.icon}</span>
-                {h.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {phase.kind === "quiz" && beat?.quizOptions && (
-          <div className="px-5 pb-4">
-            <div className="text-[11px] uppercase tracking-widest text-purple-300/70 mb-2">Muster-Radar — was passiert hier gerade?</div>
-            <div className="grid grid-cols-1 gap-2">
-              {beat.quizOptions.map((opt) => (
-                <button
-                  key={opt}
-                  onClick={() => quizAnswer(opt)}
-                  className="rounded-xl border border-purple-400/40 bg-purple-900/25 text-purple-100 px-4 py-2.5 text-sm text-left hover:bg-purple-800/40 transition"
-                >
-                  🧭 {tacticById(opt)?.name ?? opt}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {phase.kind === "resolve" && (
-          <div className="px-5 pb-5 space-y-3">
-            <button
-              onClick={() => setPhase({ kind: "debrief" })}
-              className="w-full rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold px-4 py-2.5 transition"
-            >
-              Im Journal festhalten
-            </button>
-          </div>
-        )}
-
-        {phase.kind === "debrief" && (
-          <div className="px-5 pb-5 space-y-3 border-t border-white/10 pt-4">
-            <div className="text-[11px] uppercase tracking-widest text-purple-300/70">{def.debriefIntro}</div>
-            {namedTacticDefs.length === 0 ? (
-              <p className="text-white/80 text-sm leading-relaxed">
-                {def.beats.filter((b) => b.tactic).map((b) => tacticById(b.tactic!)!.name).join(" und ")} waren im Spiel —
-                unerkannt diesmal. Kein Fehler: Das Muster steht jetzt im Journal. Beim nächsten Mal siehst du es früher.
-              </p>
-            ) : (
-              namedTacticDefs.map((t) => (
-                <div key={t!.id} className="rounded-lg bg-purple-900/25 border border-purple-400/25 px-3.5 py-2.5">
-                  <div className="text-purple-100 font-semibold text-sm">Das war {t!.name}. Echte Menschen benutzen das. Du hast es erkannt.</div>
-                  <div className="text-white/60 text-xs mt-1">{t!.feelsLike}</div>
-                  <div className="text-emerald-200/80 text-xs mt-1">Gegenmittel: {t!.counter}</div>
-                </div>
-              ))
-            )}
-            <p className="text-white/35 text-[11px] leading-relaxed">
-              Diese Dynamiken spielen nur hier, im fiktiven Rahmen, gegen erwachsene Spielfiguren — nie gegen dich als
-              Person. Erkannt zu haben zählt mehr als „richtig" gehandelt zu haben.
-            </p>
-            <button
-              onClick={close}
-              className="w-full rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold px-4 py-2.5 transition"
-            >
-              Zurück zur Welt
-            </button>
-          </div>
-        )}
+  const tactics = def.beats.flatMap((part) => part.tactic ? [tacticById(part.tactic)] : []).filter((entry) => !!entry);
+  const button = "rounded-xl border border-white/20 bg-white/10 hover:bg-white/20 px-4 py-2 text-sm text-white disabled:opacity-40";
+  return <div className="absolute inset-x-0 bottom-0 z-30 pointer-events-auto flex justify-center px-4 pb-4">
+    <section aria-label="Fiktive Gesprächsszene" className="w-full max-w-2xl rounded-2xl border border-purple-300/25 bg-[#13101e]/95 shadow-xl text-white overflow-hidden">
+      <header className="flex items-start justify-between gap-3 px-5 py-3 border-b border-white/10">
+        <div><h2 className="font-bold text-amber-100">{def.title}</h2><p className="text-xs text-white/60">Fiktive Szene mit {def.npcName}</p></div>
+        <button className={button} disabled={paused} onClick={close}>Verlassen ohne Kosten</button>
+      </header>
+      <p className="px-5 pt-3 text-xs text-white/60">Du wählst eine Antwort für eine erfundene Figur. Es werden keine Kristalle ausgegeben. Du kannst jeden Abschnitt überspringen oder die Szene verlassen.</p>
+      <div className="px-5 py-4 min-h-28 max-h-[35vh] overflow-y-auto"><p className="text-sm leading-relaxed"><Typewriter text={npcLine} /></p>{note && <p className="mt-2 text-xs text-white/60">{note}</p>}</div>
+      <div className="px-5 pb-4 flex flex-wrap gap-2">
+        {phase.kind === "beat" && <>
+          {HALTUNGEN.map((choice) => <button key={choice.id} className={button} disabled={paused} onClick={() => choose(choice.id)}>{choice.label}</button>)}
+          <button className={button} disabled={paused} onClick={() => setPhase({ kind: "reply", idx: phase.idx })}>Abschnitt überspringen</button>
+        </>}
+        {phase.kind === "quiz" && <>
+          {beat?.quizOptions?.map((answer) => <button key={answer} className={button} disabled={paused} onClick={() => quizAnswer(answer)}>{tacticById(answer)?.name ?? "Weitere Einordnung"}</button>)}
+          <button className={button} disabled={paused} onClick={() => setPhase({ kind: "reply", idx: phase.idx })}>Ohne Einordnung weiter</button>
+        </>}
+        {phase.kind === "reply" && <button className={button} disabled={paused} onClick={next}>Nächsten Abschnitt lesen</button>}
+        {phase.kind === "resolve" && <button className={button} disabled={paused} onClick={() => setPhase({ kind: "debrief" })}>Einordnung ansehen</button>}
       </div>
-    </div>
-  );
+      {phase.kind === "debrief" && <div className="border-t border-white/10 px-5 py-4 space-y-3">
+        <p className="font-semibold text-sm">{def.debriefIntro}</p>
+        {tactics.map((tactic) => <div key={tactic.id} className="text-sm"><p className="text-purple-100">{tactic.name}</p><p className="text-white/70">{tactic.feelsLike}</p><p className="text-white/70">Mögliche Antwort der Spielfigur: {tactic.counter}</p></div>)}
+        <p className="text-xs text-white/60">Diese Begriffe ordnen Beispiele ein. Sie sind keine Diagnose und erlauben keine automatische Bewertung realer Menschen. Fachliche und Betroffenen-Prüfung offen.</p>
+        <button className={button} disabled={paused} onClick={finish}>Szene abschließen und zur Welt</button>
+      </div>}
+    </section>
+  </div>;
 }

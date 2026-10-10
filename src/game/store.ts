@@ -1,6 +1,11 @@
 // PHÄNOMENAUTIK 3 — Mini-Store: Brücke zwischen Game-Loop (three.js) und React-HUD
 
+import type { RoomId } from "./openWorld";
+
 export interface HudState {
+  openWorldRevision: number;
+  activeRoom: RoomId | null;
+  encounterId: string | null;
   mode: "title" | "sailing" | "onfoot";
   stability: number;
   maxStability: number;
@@ -24,10 +29,14 @@ export interface HudState {
   showFps: boolean;
   toasts: { id: number; text: string; kind: "info" | "good" | "bad" }[];
   menuOpen: boolean;
+  paused: boolean;
+  protectionOpen: "pause" | "help" | null;
+  explorationOpen: boolean;
+  combatEnabled: boolean;
+  saveError: string | null;
   dead: boolean;
   dialogNpc: string | null;
   battlePhen: string | null;
-  encounterId: string | null; // aktive Strand-Begegnung (M4)
   journalOpen: boolean;
   loreStone: string | null; // Id des offenen Lore-Steins
   chatOpen: boolean;
@@ -40,6 +49,9 @@ export interface HudState {
 }
 
 export const initialHud: HudState = {
+  openWorldRevision: 0,
+  activeRoom: null,
+  encounterId: null,
   mode: "title",
   stability: 1,
   maxStability: 1,
@@ -63,10 +75,14 @@ export const initialHud: HudState = {
   showFps: false,
   toasts: [],
   menuOpen: false,
+  paused: false,
+  protectionOpen: null,
+  explorationOpen: false,
+  combatEnabled: false,
+  saveError: null,
   dead: false,
   dialogNpc: null,
   battlePhen: null,
-  encounterId: null,
   journalOpen: false,
   loreStone: null,
   chatOpen: false,

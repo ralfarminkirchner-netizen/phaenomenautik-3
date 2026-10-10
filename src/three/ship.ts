@@ -17,6 +17,8 @@ export class Ship {
   heading = 0;
   speed = 0;
   private turnLean = 0;
+  private hullPitch = 0;
+  private hullRoll = 0;
   private wake: THREE.Mesh;
   private wakeMat: THREE.ShaderMaterial;
   moored = false;
@@ -80,11 +82,18 @@ export class Ship {
     speedLevel: number,
     particles: ParticleSystem,
     waveY: (x: number, z: number) => number,
+    field?: { windX: number; windZ: number; windSpeed: number; currentX: number; currentZ: number; tide: number },
   ): { blocked: boolean } {
     if (this.moored) {
+      this.speed = 0;
       input = { forward: 0, turn: 0, turbo: false };
     }
-    const maxSpeed = (24 + speedLevel * 5) * (input.turbo ? 1.6 : 1);
+    const windSpeed = field?.windSpeed ?? 6;
+    const alignment = field ? (-Math.sin(this.heading) * field.windX - Math.cos(this.heading) * field.windZ) / Math.max(windSpeed, 0.01) : 0;
+    // Vereinfachte Segelpolar: quer/mit dem Wind schneller, gegen ihn langsamer.
+    // Ruhiges Wasser bleibt mit geringer Paddelhilfe befahrbar.
+    const polar = clamp(0.58 + alignment * 0.28 + (1 - Math.abs(alignment)) * 0.25, 0.2, 1);
+    const maxSpeed = (24 + speedLevel * 5) * (input.turbo ? 1.6 : 1) * Math.max(0.15, windSpeed / 7) * polar;
     const accel = 14;
     const target = input.forward * maxSpeed;
     this.speed = Math.abs(this.speed - target) < accel * dt ? target : this.speed + Math.sign(target - this.speed) * accel * dt;
@@ -92,15 +101,16 @@ export class Ship {
     this.heading += input.turn * turnRate * dt;
     this.turnLean = lerp(this.turnLean, input.turn * clamp(Math.abs(this.speed) / maxSpeed, 0, 1), dt * 4);
 
-    const nx = this.x - Math.sin(this.heading) * this.speed * dt;
-    const nz = this.z - Math.cos(this.heading) * this.speed * dt;
+    const nx = this.x - Math.sin(this.heading) * this.speed * dt + (this.moored ? 0 : field?.currentX ?? 0) * dt;
+    const nz = this.z - Math.cos(this.heading) * this.speed * dt + (this.moored ? 0 : field?.currentZ ?? 0) * dt;
+    const waterline = (field?.tide ?? 0) - 2.2;
 
     let blocked = false;
-    if (terrainHeight(nx, nz) > -2.2) {
+    if (terrainHeight(nx, nz) > waterline) {
       blocked = true;
-      if (terrainHeight(nx, this.z) <= -2.2) {
+      if (terrainHeight(nx, this.z) <= waterline) {
         this.x = nx;
-      } else if (terrainHeight(this.x, nz) <= -2.2) {
+      } else if (terrainHeight(this.x, nz) <= waterline) {
         this.z = nz;
       } else {
         this.speed *= 0.4;
@@ -115,11 +125,14 @@ export class Ship {
     const yStern = waveY(this.x + Math.sin(this.heading) * 5, this.z + Math.cos(this.heading) * 5);
     const yPort = waveY(this.x - Math.cos(this.heading) * 2.5, this.z + Math.sin(this.heading) * 2.5);
     const yStar = waveY(this.x + Math.cos(this.heading) * 2.5, this.z - Math.sin(this.heading) * 2.5);
-    this.group.position.set(this.x, y * 0.85 + 0.25, this.z);
+    this.group.position.set(this.x, y + 0.25, this.z);
+    const damping = 1 - Math.exp(-dt * 4);
+    this.hullPitch = lerp(this.hullPitch, Math.atan2(yStern - yBow, 10) * 0.8, damping);
+    this.hullRoll = lerp(this.hullRoll, Math.atan2(yStar - yPort, 5) * 0.7 + this.turnLean * 0.14, damping);
     this.group.rotation.set(0, 0, 0);
     this.group.rotateY(this.heading);
-    this.group.rotateX(Math.atan2(yStern - yBow, 10) * 0.8);
-    this.group.rotateZ(Math.atan2(yStar - yPort, 5) * 0.7 + this.turnLean * 0.14);
+    this.group.rotateX(this.hullPitch);
+    this.group.rotateZ(this.hullRoll);
 
     // Segel: steht das Schiff → eingerollt; Fahrt → gesetzt
     const targetSail = this.moored ? 0.12 : 0.25 + 0.75 * clamp(Math.abs(this.speed) / maxSpeed, 0, 1);
@@ -127,6 +140,7 @@ export class Ship {
     for (const sn of this.sailNodes) {
       sn.scale.y = Math.max(0.08, this.sailAmount);
       sn.scale.x = 0.7 + 0.3 * this.sailAmount;
+      if (field) sn.rotation.y = Math.sin(Math.atan2(field.windX, field.windZ) - this.heading) * 0.35;
     }
 
     const strength = clamp(Math.abs(this.speed) / maxSpeed, 0, 1);

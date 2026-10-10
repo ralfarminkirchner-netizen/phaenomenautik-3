@@ -32,10 +32,10 @@ export const QUESTS: QuestDef[] = [
     id: "q_tee",
     title: "Ein warmer Becher",
     giver: "tove",
-    desc: "Tove hat einen Beruhigungstee für Ben aufgebrüht — er sitzt seit Tagen unruhig am Feuer. Bringe ihn ihm.",
+    desc: "Tove hat einen warmen Tee für Ben vorbereitet. Wenn du möchtest, kannst du ihn ans Feuer bringen. Der Tee ist eine Spielressource.",
     goalDesc: () => "Bringe Ben den Tee.",
     isDone: () => false, // wird per Dialog abgeschlossen
-    reward: "+1 Notfallkarte, Bens Vertrauen",
+    reward: "+1 Notfallkarte als Spielressource",
     applyReward: (s) => {
       s.player.items.karte = (s.player.items.karte ?? 0) + 1;
     },
@@ -72,8 +72,8 @@ export const QUESTS: QuestDef[] = [
     id: "q_forschung",
     title: "Feldforschung",
     giver: "ilse",
-    desc: "Dr. Wiegand braucht Felddaten: Überwinde drei beliebige Phänomene und berichte ihr von den Begegnungen.",
-    goalDesc: (s) => `Überwundene Phänomene: ${s.islands.filter((i) => i.overcome).length} / 3`,
+    desc: "Dr. Wiegand sammelt Notizen zur erfundenen Seekarte. Du kannst drei Szenen abschließen und ihre Notizen lesen. Die Aufgabe ist freiwillig.",
+    goalDesc: (s) => `Abgeschlossene Spielszenen: ${s.islands.filter((i) => i.overcome).length} / 3`,
     isDone: (s) => s.islands.filter((i) => i.overcome).length >= 3,
     reward: "+60 Einsicht, 1× Ankerstein",
     applyReward: (s) => {
@@ -83,10 +83,10 @@ export const QUESTS: QuestDef[] = [
   },
   {
     id: "q_mutprobe",
-    title: "Bens Herz",
+    title: "Bens Inselnotiz",
     giver: "ben",
-    desc: "Ben verrät dir: Das Herzrasen auf dem Alarm-Atoll jagt ihn seit Jahren in den Schlaf. Wenn ES bezwungen wäre … könnte er vielleicht wieder atmen.",
-    goalDesc: () => "Überwinde das Herzrasen und kehre zu Ben zurück.",
+    desc: "Ben interessiert sich für das Trommelwesen auf dem Alarm-Atoll. Du kannst die erfundene Szene abschließen und seine Inselnotiz lesen. Dadurch wird keine Person geheilt.",
+    goalDesc: () => "Schließe die Szene des Trommelwesens ab und besuche Ben, wenn du möchtest.",
     isDone: (s) => s.islands.find((i) => i.id === "herzrasen")?.overcome ?? false,
     reward: "+50 Einsicht, 1× Notfallkarte",
     applyReward: (s) => {
@@ -98,10 +98,10 @@ export const QUESTS: QuestDef[] = [
     id: "q_getrennt",
     title: "Getrennte Utensilien",
     giver: "tove",
-    desc: "Tove zeigt dir ihr Kochfeld: „Glutenfrei heißt getrennt — eigener Löffel, eigenes Brett, eigenes Sieb. Und auf den Packungen suchst du die durchgestrichene Ähre. Kein Hexenwerk, nur Handwerk. Koch mir etwas Glutenfreies, mindestens zwei Zutaten.“",
+    desc: "Tove schlägt ein Spielrezept aus mindestens zwei Zutaten vor, die das Spiel als glutenfrei einordnet. Du kannst es am Kochfeld ausprobieren. Die Zuordnung ersetzt keine Prüfung realer Lebensmittel.",
     goalDesc: (s) => (s.gfMealCooked ? "Glutenfrei gekocht — zurück zu Tove." : "Koche am Feuer (K) etwas Glutenfreies (≥ 2 Zutaten)."),
     isDone: (s) => s.gfMealCooked === true,
-    reward: "+30 Einsicht, 1× Leinentuch, Toves Kochfeld-Wissen",
+    reward: "+30 Einsicht, 1× Leinentuch, Spielrezept notiert",
     applyReward: (s) => {
       s.player.xp += 30;
       s.materials.tuch = (s.materials.tuch ?? 0) + 1;

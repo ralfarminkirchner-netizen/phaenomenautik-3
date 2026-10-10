@@ -1,5 +1,5 @@
-// PHÄNOMENAUTIK 3 — Lore-Echos: leuchtende Runensteine mit einer Zeile Wahrheit
-// oder Kryptischem (Souls-Tonalität, Atlas-verwurzelt, nie belehrend).
+// PHÄNOMENAUTIK 3 — Lore-Echos: leuchtende Runensteine mit fiktiven Landschaftsnotizen
+// und freiwilligen Wegen (Souls-Tonalität, Atlas-verwurzelt, nie belehrend).
 
 export interface LoreLine {
   id: string;
@@ -9,40 +9,40 @@ export interface LoreLine {
 
 export const LORE: LoreLine[] = [
   // ── Ankerplatz ──
-  { id: "lore_harbor_1", island: "harbor", text: "Der Ankerplatz war nie ein Phänomen. Oder er wurde so oft verstanden, dass er es vergaß." },
-  { id: "lore_harbor_2", island: "harbor", text: "Mara lotst die Schiffe. Tove heilt. Kaj baut. Ben wartet. Alle vier kamen an wie du: zitternd." },
-  { id: "lore_harbor_3", island: "harbor", text: "Wer hier anlegt, hat schon überlebt. Das Meer wirft niemanden her, der es nicht durch sich hindurchgelassen hat." },
+  { id: "lore_harbor_1", island: "harbor", text: "Ein Hafen auf einer erfundenen Seekarte: Hier beginnt ein möglicher Weg, und hier darf er enden." },
+  { id: "lore_harbor_2", island: "harbor", text: "Mara zeichnet Karten, Tove sammelt Ideen, Kaj baut Schiffe und Ben sitzt am Feuer. Alle sind Figuren dieser Geschichte." },
+  { id: "lore_harbor_3", island: "harbor", text: "Ein freier Steg ist für die nächste Pause da. Die See wartet auf keine Leistung." },
   // ── Wiederkehr-Riff ──
-  { id: "lore_flashback_1", island: "flashback", text: "Der Falter zeigt dir keine Bilder aus Bosheit. Er zeigt sie, weil niemand je hingesehen hat." },
-  { id: "lore_flashback_2", island: "flashback", text: "Hier ist es immer zweimal bewohnt: einmal vom Heute, einmal vom Damals, das nicht vergehen wollte." },
-  { id: "lore_albtraum_1", island: "albtraum", text: "Mura singt, damit sie nicht allein wach ist. Ihr Lied kennt keinen Schlaf — und keine Schande." },
-  { id: "lore_albtraum_2", island: "albtraum", text: "Ein Traum, den man umschreibt, ist kein Traum mehr. Er wird zur Übung. Die Insel verträgt Übungen." },
+  { id: "lore_flashback_1", island: "flashback", text: "Auf den Papierflügeln des Falters wechseln erfundene Bilder. Keines muss gelesen werden." },
+  { id: "lore_flashback_2", island: "flashback", text: "Zwei Bilderrahmen zeigen verschiedene Zeiten der Inselgeschichte. Der Weg dazwischen bleibt offen." },
+  { id: "lore_albtraum_1", island: "albtraum", text: "Muras Lied färbt den Abendhimmel. Es gehört zu dieser erfundenen Insel." },
+  { id: "lore_albtraum_2", island: "albtraum", text: "Die Geschichte kann ein anderes Ende erhalten. Das ist eine Möglichkeit im Spiel." },
   // ── Alarm-Atoll ──
-  { id: "lore_hypervigilanz_1", island: "hypervigilanz", text: "Der Wächter hat nie geschlafen, seit … niemand weiß es. Er selbst hat es vergessen. Das ist das Traurigste." },
-  { id: "lore_hypervigilanz_2", island: "hypervigilanz", text: "Alle Steine hier zeigen nach außen. Selbst die Insel lauscht noch auf den Schritt, der längst verhallt ist." },
-  { id: "lore_herzrasen_1", island: "herzrasen", text: "Es ist kein Feind. Es ist ein Botenjunge, der nie gelernt hat, langsam zu gehen." },
-  { id: "lore_herzrasen_2", island: "herzrasen", text: "Der Boden pocht in einem Takt, der kein guter Takt ist. Er pocht erst seitdem dich etwas überrannte." },
+  { id: "lore_hypervigilanz_1", island: "hypervigilanz", text: "Das Licht des Wächters streift den Horizont. Von der Bank lässt es sich aus der Ferne betrachten." },
+  { id: "lore_hypervigilanz_2", island: "hypervigilanz", text: "Die Felsen zeigen in viele Richtungen. Der Rückweg ist eine davon." },
+  { id: "lore_herzrasen_1", island: "herzrasen", text: "Ein Trommelwesen springt zwischen den Steinen. Sein Takt ist eine Spielkulisse." },
+  { id: "lore_herzrasen_2", island: "herzrasen", text: "Auf diesem Atoll verändert sich ein Rhythmus; über einen menschlichen Herzschlag sagt er nichts." },
   // ── Nebelbank ──
-  { id: "lore_vermeidung_1", island: "vermeidung", text: "Jeder Wegweiser hier zeigt auf »später«. Vermeidia war einmal ein Kompass. Der Norden war zu schwer." },
-  { id: "lore_vermeidung_2", island: "vermeidung", text: "Umwege waren früher Abkürzungen zum Überleben. Die Insel erinnert sich daran mit Stolz, nicht mit Scham." },
-  { id: "lore_verdraengung_1", island: "verdraengung", text: "Unter den Hügeln liegt kein Müll. Es sind Schätze, die Angst hatten, gesehen zu werden." },
-  { id: "lore_verdraengung_2", island: "verdraengung", text: "Der Verdränger kehrt seit Jahrzehnten. Sein Besen ist schwer. Niemand hat je danke gesagt." },
+  { id: "lore_vermeidung_1", island: "vermeidung", text: "Mehrere Wegweiser stehen im Nebel. Die Spielfigur darf jeden Weg auslassen." },
+  { id: "lore_vermeidung_2", island: "vermeidung", text: "Ein Umweg gehört ebenso zur Karte wie eine kurze Strecke." },
+  { id: "lore_verdraengung_1", island: "verdraengung", text: "Die Kisten tragen erfundene Ortsnamen. Keine muss geöffnet werden." },
+  { id: "lore_verdraengung_2", island: "verdraengung", text: "Der Besen steht neben einer Bank. Die Geschichte wartet, wenn du eine Pause wählst." },
   // ── Glaswelt ──
-  { id: "lore_dissoziation_1", island: "dissoziation", text: "Das Glas hier war einmal eine Tür, die zugefallen ist. Dissozia hütet sie. Nicht aus Kälte — aus Liebe." },
-  { id: "lore_dissoziation_2", island: "dissoziation", text: "Wer nicht ganz da ist, kann nicht ganz getroffen werden. So steht es in jedem Fenster dieser Insel." },
-  { id: "lore_erstarrung_1", island: "erstarrung", text: "Erstarrion war ein Schrei, dem die Luft ausging. Das Eis bewahrte ihn. Er wartet auf Tauwetter." },
-  { id: "lore_erstarrung_2", island: "erstarrung", text: "Stillstand ist keine Entscheidung. Es ist die älteste Verteidigung überhaupt — und sie hat funktioniert." },
+  { id: "lore_dissoziation_1", island: "dissoziation", text: "Zwischen den Glasbögen bleibt ein Weg am Ufer frei." },
+  { id: "lore_dissoziation_2", island: "dissoziation", text: "Die Glasscheiben spiegeln die Landschaft dieser Insel, keine persönliche Geschichte." },
+  { id: "lore_erstarrung_1", island: "erstarrung", text: "Ein Licht wandert über das Eis. Erstarrion bleibt in selbst gewähltem Abstand." },
+  { id: "lore_erstarrung_2", island: "erstarrung", text: "Die Spielfigur kann stehen bleiben. Keine Körperbewegung ist für die Szene erforderlich." },
   // ── Trauer-Atoll ──
-  { id: "lore_scham_1", island: "scham", text: "Die Mauern bestehen aus Sätzen in deiner eigenen Stimme. Aber die Worte waren nie deine." },
-  { id: "lore_scham_2", island: "scham", text: "Der Golem fragt: »Wer hat dir erlaubt, hier zu sein?« Die richtige Antwort kostet keine Kraft: »Ich.«" },
-  { id: "lore_leere_1", island: "leere", text: "Die Mitte der Insel fehlt nicht. Sie ist nur müde. Gefühle, die Sicherheit zogen, kehren leise zurück." },
-  { id: "lore_leere_2", island: "leere", text: "Hier war einmal ein Gefühl. Ein großes. Die Schale ist noch warm." },
+  { id: "lore_scham_1", island: "scham", text: "Die Mauer trägt Schriftzeichen aus der Inselgeschichte. Sie bewertet niemanden vor dem Bildschirm." },
+  { id: "lore_scham_2", island: "scham", text: "Neben der Mauer liegt ein freier Weg. Es muss kein Satz richtig beantwortet werden." },
+  { id: "lore_leere_1", island: "leere", text: "Die Schale spiegelt den Himmel. Freier Raum ist hier ein Bild der Landschaft." },
+  { id: "lore_leere_2", island: "leere", text: "Ein Wolkenschatten zieht durch die Senke. Die Szene verspricht keine Veränderung eigener Gefühle." },
   // ── Misstrauens-Riff ──
-  { id: "lore_misstrauen_1", island: "misstrauen", text: "Misstrania prüft jeden Anker zweimal. Einmal hat einer gehalten, was er versprach. Seitdem prüft sie weiter." },
-  { id: "lore_misstrauen_2", island: "misstrauen", text: "Die Fallen hier sind gute Handwerksarbeit. Wer sie baute, wollte nie böse sein — nur nie wieder überrascht." },
-  { id: "lore_naehe_1", island: "naehe", text: "Komm her. Geh weg. Beides stimmt. Beides ist wahr. Das Phantom hat beides gelernt, gleichzeitig, von derselben Hand." },
-  { id: "lore_naehe_2", island: "naehe", text: "Ebbe und Flut im Sekundentakt: Nähe war Sehnsucht und Bedrohung in einem. Die Insel lernt gerade einen Mittelweg." },
+  { id: "lore_misstrauen_1", island: "misstrauen", text: "Misstrania prüft ein Seil auf ihrem Steg. Die Spielfigur steht auf einem anderen." },
+  { id: "lore_misstrauen_2", island: "misstrauen", text: "Abstand lässt sich wählen. Das Spiel fordert kein Vertrauen." },
+  { id: "lore_naehe_1", island: "naehe", text: "Zwei Stege liegen am Wasser. Hinüberzugehen bleibt eine Möglichkeit." },
+  { id: "lore_naehe_2", island: "naehe", text: "Beide Stege besitzen einen Rückweg. Annäherung ist keine Pflicht." },
   // ── Sturmherd ──
-  { id: "lore_sturmherd_1", island: "sturmherd", text: "In der Mitte dreht sich alles Ungesagte. Ein Brief, der nie geöffnet wurde. Er wartet auf zwölf Siegel." },
-  { id: "lore_sturmherd_2", island: "sturmherd", text: "Der Sturm ist kein Unwetter. Er ist deine Geschichte ohne Zeugen. Gib ihr Worte, und er wird Wetter." },
+  { id: "lore_sturmherd_1", island: "sturmherd", text: "Über dem Felsen drehen sich Wolken. Der Zugang folgt einer Spielregel." },
+  { id: "lore_sturmherd_2", island: "sturmherd", text: "Dieser Sturm gehört zur erfundenen Seekarte. Eine persönliche Geschichte muss nicht erzählt werden." },
 ];

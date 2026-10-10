@@ -1,0 +1,367 @@
+{
+  "source": "/Volumes/ThunderBolt4_2TB/Development/Projects/phaenomenautik-3",
+  "head": "3343519",
+  "remoteBase": "a54593e",
+  "files": [
+    {
+      "path": "src/App.tsx",
+      "sha256": "16e77412c03127e381edcad779a9fff010c720c528dbc2a8c5b0877f16166adb",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/game/audio.ts",
+      "sha256": "205376bf778bc7d2a303c534cc01a8f7828cbc2cc3e863766151965457dd63a1",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/game/data.ts",
+      "sha256": "13c7eab37c8457263cfae4a7d9dad45aa0f52bb75a3bf329992faea420d82443",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/game/dialogAI.ts",
+      "sha256": "8ba6a7f55ce73d5e45fdbf777be667697b1b3610c19b09f48b6aa0c36e41bfcc",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/game/duels.ts",
+      "sha256": "af89b5102ba2bd4bf6db3ee485107ea5550f9c250ac667fade7ffa2f8bf7e0cf",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/game/echoes.ts",
+      "sha256": "f0c4acd745d0ce9f1163009fea1d3b9974734873868e199e8acc4f49ae735f70",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/game/npc.ts",
+      "sha256": "5be2b006cef564f3a8c96c0b0554e81b5db41c3cfc101b18e3de466174d4fd4c",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/game/quests.ts",
+      "sha256": "761dd3346b04309f3f6aa6464be2462f58b315d1eb6cc1e0ff79616f48062690",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/game/runtime.ts",
+      "sha256": "8aec1601c949960c446103ce4481ae0a1f68a0618f35bdd8ff119473ae2605ea",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/game/state.ts",
+      "sha256": "e021bd9a2f489001f242e20d15fbb7278343b615a535b9a644483f31e3b2c76e",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/game/store.ts",
+      "sha256": "abec827fc3291aa871259df79d0259e405825d525d42ee5ae2263741c231935b",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/three/ship.ts",
+      "sha256": "513f72b378aebe6e54c50400d321b1e3c713539fc340871f1b0ad85ecd06445c",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/three/sky.ts",
+      "sha256": "6b23d9fe9729ba3f3e9446ea9514dac95a1fd8ce3fc435474933906ebc01b7d3",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/three/water.ts",
+      "sha256": "70a051c0b48eb5d27102b20313ef118205883fbf9c2a4efa35af65306a1debb5",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/three/world.ts",
+      "sha256": "d98690b8e84fe82eb1c3ae11f698695b6235f2a013eaea7b945cbfc1695728ba",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/ui/BattleOverlay.tsx",
+      "sha256": "0799bf92a145310706e6f846e8adc9cd7e251f27be90367ad702a75e29a6bedf",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/ui/BodyMap.tsx",
+      "sha256": "1851d0ff2920cee933ed85b4d42c4a697f7f69aeaa6ab9520134c43037f4b705",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/ui/ChatOverlay.tsx",
+      "sha256": "dfc3bea2e86df2a3b9346f07362bd4d1ac58d75a96fcf41d83d7976cfb32aa63",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/ui/DialogOverlay.tsx",
+      "sha256": "29c1a6aadcfad96f26edecf51c10da8abfe4c3c9e37ea1471e6f291407b25811",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/ui/DuelOverlay.tsx",
+      "sha256": "b8e80e1c56492486e6d9e2e057a8678c4946cd880005bbdae37c012261a13067",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/ui/HUD.tsx",
+      "sha256": "a49d12cc291d38db812c885416726365220d65fc52bb82b0bfb8576fcfcc241a",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/ui/TitleScreen.tsx",
+      "sha256": "d6ba579e7f599fd9487122bea64e2a36550ab156b51c8f7934ee1c1fb611c8d7",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "vite.config.ts",
+      "sha256": "df204033d707288a46e480e6ef0abee4754f5c33d6891c7bb9547e99d223ef6d",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/KIMI-OPEN-WORLD-SIMULATION-AUFTRAG-2026-10-10.md",
+      "sha256": "17bd8a3af79ff9f94b08a2b25b7666386f1a2ed00216b5a16e7bee66621fc7ac",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/atlas-text-review.md",
+      "sha256": "bd02fc22c5a281261ca173aefe3bd261e4108f658441474effbd946fa24be0a0",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/aktuelle-ansicht.jpg",
+      "sha256": "5d464fc7dfe3cb99ff3f25076517715ecc8d896a883341fbc1a52b0b1efc33f6",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/atlas-wiedergeoeffnet.jpg",
+      "sha256": "2b88d8f35e6d978bdfffd425308bc7f4cf0a79c1a2e9888e83262ff6e515a53e",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/dynamic-encounter-desktop.jpg",
+      "sha256": "760da7acafe69b1079dabbd7a9203498c06916b4b924aff0876796f7f588d3db",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/dynamic-encounter-mobile.jpg",
+      "sha256": "f709bb46b206e726562f7d48b4c83758453c61464a7da19b70b8a5b7034577c3",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/dynamic-title-desktop.jpg",
+      "sha256": "e3ca78f95a1bad739e286d1efdfd61946c836758eec26616deccc73470448707",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/flimmerbucht-rueckkehr.jpg",
+      "sha256": "d839b6e5ce8fc785caba1ff855efa37f41490d0f828414f7826d5e359d168850",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/flimmerbucht.jpg",
+      "sha256": "d839b6e5ce8fc785caba1ff855efa37f41490d0f828414f7826d5e359d168850",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/gestaltung-abschluss-mobil.png",
+      "sha256": "53a75b230e1bfcf9308d0da0356c12612dcccb24c129538fc820fc293d781341",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/gestaltung-abschluss.png",
+      "sha256": "7c615d05e32777421f87963ca1a29d2eb5c287013af5ba2392ad2f1a7ebd6b4e",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/gestaltung-atlas.png",
+      "sha256": "2539bac83718271688330ffe0a1ac377db07ad03784ded5c3b7eea0b8338f426",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/gestaltung-auswahl-mobil.png",
+      "sha256": "896ddd617050d7c1018eb7caa926ab3b115702322a6a6b8277a774f1ef1626e7",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/gestaltung-auswahl.png",
+      "sha256": "7f7567f4f50530cd0875d4bbb19393d93bd4f5ae50a8d0dbbad6e1f02879b488",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/gestaltung-einstieg.png",
+      "sha256": "d830eb396c3d5685094dc646f2d575f418eff55726f24170e338c31be769e90d",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/gestaltung-hilfe-mobil.png",
+      "sha256": "99307e4f4dcd25efe8f5d6dd2e3345c88f8ad42772c8aa4f45bfb903e184ef96",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/gestaltung-pause.png",
+      "sha256": "74b1e350f50966e2567a8b578ec264dfd98e3a28cb6e91ab3e05b1271f8a90b4",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/hilfe.jpg",
+      "sha256": "1c340e11ff88375be4de808b7620ddd124064e663029be32ea60b540f667657e",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/kimi-source/a54593e-2026-10-10/README.md",
+      "sha256": "51de5d874c34e2a346e2d9637fbefc983dd13cff5114ca4d7c16257f57bcc870",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/kimi-source/a54593e-2026-10-10/comparison.json",
+      "sha256": "eb7e8584c80735a06d343369080f88feeb61bf32eb207021ba9009e3d6859141",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/kimi-source/a54593e-2026-10-10/full-3343519-to-a54593e.patch",
+      "sha256": "ee9c2abb11e71636e03c04ecace19745fff0217f26e475d326b9c5ac4425fa98",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/kimi-source/a54593e-2026-10-10/manifest.json",
+      "sha256": "a07f71ce2c57723de6a5b4d41e15a08bc3e805c2d5a87e59fc36406543c9557b",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/kimi-source/a54593e-2026-10-10/scene-3343519-to-a54593e.patch",
+      "sha256": "fbfc93ad9ac08e9498a889ba1220b541a46339188c3594d886781840e94b2d71",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/kimi-source/a54593e-2026-10-10/src/game/encounters.ts",
+      "sha256": "ed01f7cb91a5e67ab0e1aad81fa660ae7a74f366d5dad17eab42b8a5a3bafb21",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/kimi-source/a54593e-2026-10-10/src/three/ship.ts",
+      "sha256": "513f72b378aebe6e54c50400d321b1e3c713539fc340871f1b0ad85ecd06445c",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/kimi-source/a54593e-2026-10-10/src/three/sky.ts",
+      "sha256": "6b23d9fe9729ba3f3e9446ea9514dac95a1fd8ce3fc435474933906ebc01b7d3",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/kimi-source/a54593e-2026-10-10/src/three/water.ts",
+      "sha256": "70a051c0b48eb5d27102b20313ef118205883fbf9c2a4efa35af65306a1debb5",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/kimi-source/a54593e-2026-10-10/src/three/wisps.ts",
+      "sha256": "a6c3e454e17d5d3b5d9df765b55940b8c6441c0b8ae7700c6f9de684a2a4e62a",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/kimi-source/a54593e-2026-10-10/src/three/world.ts",
+      "sha256": "a6b98a55662b4b6e8e3fd95eb4d4e7cc84fed63071baa351098d7c396178884c",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/kimi-source/a54593e-2026-10-10/src/ui/EncounterOverlay.tsx",
+      "sha256": "27399e6d8df7aff7585092a86ff4e6be83a188c3dd5aacf16bc12439522536c2",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/spiel-wieder-geoeffnet.jpg",
+      "sha256": "ee796e45c337a6dfe7504f20b3daad92b38da0c844e4cae1f86674ce834f99fc",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/stale-tab-save-protection.jpg",
+      "sha256": "70b7855e482863ee34cf34fa0988d22406bdd15999d93f1148a9d954c81a7e6b",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/evidence/welt-pause.jpg",
+      "sha256": "56541c3acd71e9c90c5a2d9c669d79f8ceef701fd0235df23cdc9aacd6156124",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/gestaltungsnachweis.md",
+      "sha256": "19c4c87015cc90e88b753ebfc66937d97d7e72ff7417c2be7e8f6fe6e283c601",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/gestaltungsplan.md",
+      "sha256": "ac12f16e0d3359612e3e7620b11205682fb60ec4bff2a75a7f2746518d6c7eeb",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/illustration-provenienz.md",
+      "sha256": "bbbd928ac7edc23ceeae9bc71db5136414edfc1b9d2b8c07748a21ce053a40da",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/lieferung.md",
+      "sha256": "7e144c47e504d7fdb1546fafb3867e182f0083fe8305b1029ecf569afcec3667",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/privacy-purpose.md",
+      "sha256": "9a9b2457cf25d06de015a3af5823c2b4379d12be6dca686d9d918d6f7823df4d",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/safety-audit.mjs",
+      "sha256": "59b87c0bf0893111b3380f9bc66bd374f2bb0161974e7223d700119a994c49e8",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/safety-evidence.md",
+      "sha256": "45377d6daf9098b536e42f03f6c773f47725a1797e905346a2ac57325b8830b2",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "docs/text-review.md",
+      "sha256": "f6a9ba2e1e68247e8719e30e8a65352285e8508fe324800fa6936c1434f886cd",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "public/images/flimmerbucht.png",
+      "sha256": "d4e2badf992b4d449bdc90a7bdb4dc5b4cd1eda72b2c2952a9a5bc8435db146e",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/game/pause.ts",
+      "sha256": "ce88558ae3d84113d1ee822daab3a68e08cadd14aaf2df21ac82a97ab1c8fd0d",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/ui/GentleEncounter.tsx",
+      "sha256": "1e3651503a76c3f9b14d9e936e5d8c1af0554761bd4eb1c9b1afb4810ffcb93f",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/ui/Protection.tsx",
+      "sha256": "bdcdace15a6786cad128e4d5d96625420cc4c0cc79a418d7f134ec5940bc7f8a",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/ui/ShoreScene.tsx",
+      "sha256": "a16170bb57e7d02b278fc239735b7624defd71e2e762e6b85bc8692290737eaf",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/ui/SurfaceBoundary.tsx",
+      "sha256": "10984795ee605f347b181ec9273b86509a2d172817d492a772a925fa4e297f64",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/ui/protection.css",
+      "sha256": "ea1d9ed1e0fddf790ea4a6a1c7b51c649588eae3898d4483d965baeb57ad4715",
+      "origin": "local-uncommitted"
+    },
+    {
+      "path": "src/ui/usePausedTimers.ts",
+      "sha256": "e5d5b5f1477556e3338ae63688c482f6ad6d9279a38ddea377b8ace8a50f3fdc",
+      "origin": "local-uncommitted"
+    }
+  ]
+}

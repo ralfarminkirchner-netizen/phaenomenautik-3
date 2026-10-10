@@ -104,12 +104,12 @@ export function HUD() {
       />
 
       {/* Kompass oben mittig */}
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 flex flex-col items-center">
+      <div className="absolute top-20 left-1/2 -translate-x-1/2 flex flex-col items-center">
         <Compass yaw={h.compassYaw} bearing={h.targetBearing} targetName={h.targetName} targetDist={h.targetDist} />
       </div>
 
       {/* Uhrzeit & Wetter */}
-      <div className="absolute top-4 right-5 text-right text-white/80 text-xs drop-shadow">
+      <div className="absolute top-20 right-5 text-right text-white/80 text-xs drop-shadow">
         <div className="text-base font-semibold tabular-nums">
           {String(hh).padStart(2, "0")}:{String(mm).padStart(2, "0")}
         </div>
@@ -119,8 +119,8 @@ export function HUD() {
 
       {/* Statusbalken unten links */}
       <div className="absolute bottom-5 left-5 flex flex-col gap-2">
-        <Bar value={h.stability} max={h.maxStability} color="bg-gradient-to-r from-teal-400 to-emerald-400" label="Stabilität" />
-        <Bar value={h.presence} max={h.maxPresence} color="bg-gradient-to-r from-sky-400 to-indigo-400" label="Präsenz" />
+        <Bar value={h.stability} max={h.maxStability} color="bg-gradient-to-r from-teal-400 to-emerald-400" label="Figur · Stabilität" />
+        <Bar value={h.presence} max={h.maxPresence} color="bg-gradient-to-r from-sky-400 to-indigo-400" label="Figur · Präsenz" />
         <Bar value={h.stamina} max={h.maxStamina} color="bg-gradient-to-r from-amber-400 to-lime-400" label="Ausdauer" />
         <div className="text-[10px] text-white/60 uppercase tracking-wider">Stufe {h.level}</div>
         {/* Aktive Essens-Wirkungen */}
@@ -203,22 +203,21 @@ export function HUD() {
             <div className="flex flex-col gap-3">
               <button
                 className="w-full py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-semibold transition"
-                onClick={() => store.set({ menuOpen: false })}
+                onClick={() => store.set({ menuOpen: false, paused: false, protectionOpen: null })}
               >
                 Weitersegeln
               </button>
               <button
                 className="w-full py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white transition"
                 onClick={() => {
-                  getWorld()?.saveNow();
-                  store.toast("Gespeichert.", "good");
+                  if (getWorld()?.saveNow()) store.toast("Gespeichert.", "good");
                 }}
               >
                 Speichern
               </button>
               <button
                 className="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white/70 transition text-sm"
-                onClick={() => window.location.reload()}
+                onClick={() => { if (getWorld()?.checkpoint()) window.location.reload(); }}
               >
                 Zum Titel (speichert automatisch)
               </button>
@@ -233,16 +232,15 @@ export function HUD() {
         <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center pointer-events-auto">
           <div className="text-center max-w-md px-6">
             <div className="text-4xl mb-4">🌑</div>
-            <h2 className="text-2xl font-bold text-white mb-3">Zusammenbruch</h2>
+            <h2 className="text-2xl font-bold text-white mb-3">Die Spielfigur kehrt zurück</h2>
             <p className="text-white/70 mb-8 leading-relaxed">
-              Die Stabilität ist auf null. Das ist kein Ende — nur ein Rückzug.
-              Du wachst am Feuer des Ankerplatzes wieder auf.
+              Ein Spielwert der Figur ist auf null. Du kannst am Ankerplatz weitergehen oder die Reise verlassen. Deine Ressourcen bleiben erhalten.
             </p>
             <button
               className="px-8 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold transition"
               onClick={() => getWorld()?.respawn()}
             >
-              Aufwachen
+              Zum Ankerplatz
             </button>
           </div>
         </div>

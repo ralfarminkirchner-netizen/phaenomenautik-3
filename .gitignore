@@ -4,3 +4,6 @@ dist
 .DS_Store
 qa/shots
 .kimi
+.playwright-cli
+.qa-build
+output/playwright

@@ -7,6 +7,7 @@ import { npcReply, questById } from "../game/dialogAI";
 import { store } from "../game/store";
 import { getWorld } from "../game/runtime";
 import { audio } from "../game/audio";
+import { areUiTimersPaused, useInterfacePaused, usePausedTypewriter } from "./usePausedTimers";
 
 interface Line {
   who: "npc" | "me";
@@ -14,23 +15,8 @@ interface Line {
 }
 
 function NpcTypewriter({ text }: { text: string }) {
-  const [shown, setShown] = useState("");
-  useEffect(() => {
-    setShown("");
-    let i = 0;
-    const iv = setInterval(() => {
-      i += 2;
-      setShown(text.slice(0, i));
-      if (i >= text.length) clearInterval(iv);
-    }, 14);
-    return () => clearInterval(iv);
-  }, [text]);
-  return (
-    <span onClick={() => setShown(text)}>
-      {shown}
-      {shown.length < text.length && <span className="animate-pulse">▊</span>}
-    </span>
-  );
+  const { shown, reveal } = usePausedTypewriter(text);
+  return <span onClick={reveal}>{shown}</span>;
 }
 
 export function DialogOverlay() {
@@ -44,6 +30,7 @@ export function DialogOverlay() {
 
 function DialogInner({ npc }: { npc: NpcDef }) {
   const world = getWorld()!;
+  const paused = useInterfacePaused();
   const [lines, setLines] = useState<Line[]>(() => [{ who: "npc", text: npc.greeting }]);
   const [input, setInput] = useState("");
   const [turn, setTurn] = useState(0);
@@ -56,7 +43,7 @@ function DialogInner({ npc }: { npc: NpcDef }) {
   const ask = useCallback(
     (raw: string) => {
       const text = raw.trim();
-      if (!text) return;
+      if (!text || areUiTimersPaused()) return;
       const save = world.getSave();
       const reply = npcReply(npc, text, save, turn);
       audio.select();
@@ -87,6 +74,7 @@ function DialogInner({ npc }: { npc: NpcDef }) {
   );
 
   const close = () => {
+    if (areUiTimersPaused()) return;
     audio.cancel();
     store.set({ dialogNpc: null });
   };
@@ -99,7 +87,7 @@ function DialogInner({ npc }: { npc: NpcDef }) {
             <span className="font-bold text-amber-100">{npc.name}</span>
             <span className="ml-2 text-xs italic text-white/50">{npc.role}</span>
           </div>
-          <button className="text-white/50 hover:text-white text-lg px-2" onClick={close} title="Beenden (Esc)">
+          <button className="text-white/50 hover:text-white text-lg px-2" onClick={close} disabled={paused} title="Beenden (Esc)">
             ✕
           </button>
         </div>
@@ -118,6 +106,7 @@ function DialogInner({ npc }: { npc: NpcDef }) {
           {npc.chips.map((c) => (
             <button
               key={c}
+              disabled={paused}
               className="rounded-full bg-white/[0.08] hover:bg-white/[0.15] border border-white/15 px-3 py-1 text-xs text-white/85 transition"
               onClick={() => ask(c)}
             >
@@ -133,13 +122,14 @@ function DialogInner({ npc }: { npc: NpcDef }) {
           }}
         >
           <input
+            disabled={paused}
             autoFocus
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={`Sag etwas zu ${npc.name} … (frei schreiben, z. B. „Ich heiße …“)`}
             className="flex-1 rounded-lg bg-black/40 border border-white/15 px-3 py-2 text-sm text-white outline-none focus:border-amber-300/60"
           />
-          <button type="submit" className="rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-semibold px-4 text-sm transition">
+          <button type="submit" disabled={paused} className="rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-semibold px-4 text-sm transition">
             Senden
           </button>
         </form>

@@ -1,0 +1,61 @@
+{
+  "purpose": "Read-only reference; never imported into canonical app; not a runnable separate app. Kimi label follows user identification; Git commit author is Raki.",
+  "repository": "https://github.com/ralfarminkirchner-netizen/phaenomenautik-3",
+  "commit": "a54593eff6495ea06c89022834e6c55390c09717",
+  "commit_utc": "2026-10-09T22:46:34Z",
+  "commit_europe_berlin": "2026-10-10T00:46:34+02:00",
+  "canonical_baseline": "3343519288d7f8a0d5f5055ca1a427fde573b74d",
+  "ahead_by": 2,
+  "retrieved_at": "2026-10-09T23:39:40.024691+00:00",
+  "files": [
+    {
+      "path": "src/three/ship.ts",
+      "bytes": 6364,
+      "sha256": "513f72b378aebe6e54c50400d321b1e3c713539fc340871f1b0ad85ecd06445c",
+      "github_blob_sha": "5cc297ff2565b7cc984cc9298cc11c359a74827c",
+      "source_url": "https://github.com/ralfarminkirchner-netizen/phaenomenautik-3/blob/a54593eff6495ea06c89022834e6c55390c09717/src/three/ship.ts"
+    },
+    {
+      "path": "src/three/sky.ts",
+      "bytes": 8482,
+      "sha256": "6b23d9fe9729ba3f3e9446ea9514dac95a1fd8ce3fc435474933906ebc01b7d3",
+      "github_blob_sha": "8fa14f769f8967f4e1e9b59b2d95010a13b14d71",
+      "source_url": "https://github.com/ralfarminkirchner-netizen/phaenomenautik-3/blob/a54593eff6495ea06c89022834e6c55390c09717/src/three/sky.ts"
+    },
+    {
+      "path": "src/three/water.ts",
+      "bytes": 17132,
+      "sha256": "70a051c0b48eb5d27102b20313ef118205883fbf9c2a4efa35af65306a1debb5",
+      "github_blob_sha": "ae06c87202714e877619aa4acc212cb292ef2caa",
+      "source_url": "https://github.com/ralfarminkirchner-netizen/phaenomenautik-3/blob/a54593eff6495ea06c89022834e6c55390c09717/src/three/water.ts"
+    },
+    {
+      "path": "src/three/world.ts",
+      "bytes": 63792,
+      "sha256": "a6b98a55662b4b6e8e3fd95eb4d4e7cc84fed63071baa351098d7c396178884c",
+      "github_blob_sha": "938f445e0b44acfc7f330c6aa9d468abc367fd4b",
+      "source_url": "https://github.com/ralfarminkirchner-netizen/phaenomenautik-3/blob/a54593eff6495ea06c89022834e6c55390c09717/src/three/world.ts"
+    },
+    {
+      "path": "src/three/wisps.ts",
+      "bytes": 4084,
+      "sha256": "a6c3e454e17d5d3b5d9df765b55940b8c6441c0b8ae7700c6f9de684a2a4e62a",
+      "github_blob_sha": "2bcb82a38e70a672f104d9d1b9f775fcc94e040c",
+      "source_url": "https://github.com/ralfarminkirchner-netizen/phaenomenautik-3/blob/a54593eff6495ea06c89022834e6c55390c09717/src/three/wisps.ts"
+    },
+    {
+      "path": "src/game/encounters.ts",
+      "bytes": 3523,
+      "sha256": "ed01f7cb91a5e67ab0e1aad81fa660ae7a74f366d5dad17eab42b8a5a3bafb21",
+      "github_blob_sha": "f42a663938525107964aeccd1e1293b87f58714e",
+      "source_url": "https://github.com/ralfarminkirchner-netizen/phaenomenautik-3/blob/a54593eff6495ea06c89022834e6c55390c09717/src/game/encounters.ts"
+    },
+    {
+      "path": "src/ui/EncounterOverlay.tsx",
+      "bytes": 4228,
+      "sha256": "27399e6d8df7aff7585092a86ff4e6be83a188c3dd5aacf16bc12439522536c2",
+      "github_blob_sha": "035f5167e63d21cef98f0f680b82c7319403301d",
+      "source_url": "https://github.com/ralfarminkirchner-netizen/phaenomenautik-3/blob/a54593eff6495ea06c89022834e6c55390c09717/src/ui/EncounterOverlay.tsx"
+    }
+  ]
+}

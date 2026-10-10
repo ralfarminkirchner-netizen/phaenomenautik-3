@@ -82,6 +82,7 @@ export class LoreStones {
       group.add(crystal);
 
       const light = new THREE.PointLight(0x66c8ff, 0, 9, 2);
+      light.visible = false;
       light.position.y = 2.0;
       group.add(light);
 
@@ -126,6 +127,7 @@ export class LoreStones {
       const dz = st.z - camPos.z;
       if (dx * dx + dz * dz > 260 * 260) {
         st.light.intensity = 0;
+        st.light.visible = false;
         continue;
       }
       st.crystal.position.y = 2.0 + Math.sin(t * 1.6 + st.x) * 0.16;
@@ -134,10 +136,12 @@ export class LoreStones {
       if (st.found) {
         mat.emissiveIntensity = 0.25;
         st.light.intensity = 0;
+        st.light.visible = false;
       } else {
         const pulse = 0.75 + Math.sin(t * 2.2 + st.z) * 0.25;
         mat.emissiveIntensity = 1.6 * pulse;
         st.light.intensity = 3.5 * pulse;
+        st.light.visible = true;
       }
     }
   }

@@ -1,10 +1,11 @@
 // PHÄNOMENAUTIK 3 — Körperkarte (Journal-Tab „Körper“, M3): stilisierte
 // Silhouette, Bereiche leuchten je nach Status. Tooltip pro Bereich in einer
-// Zeile Alltagssprache: was ihn stärkt, was ihn belastet. Ehrlich, nicht klinisch.
+// Zeile Alltagssprache: welche Spielressourcen die Anzeige auslösen.
 
 import { useEffect, useState } from "react";
 import { getWorld } from "../game/runtime";
 import { mealBonus, GF_WATCH, type MicroKey } from "../game/cooking";
+import { areUiTimersPaused, useInterfacePaused } from "./usePausedTimers";
 
 interface Zone {
   id: string;
@@ -20,35 +21,35 @@ const ZONES: Zone[] = [
     id: "gehirn",
     label: "Gehirn",
     icon: "🧠",
-    tip: "Stärkt: B-Vitamine (Vollkorn, Fisch, Eier), Tyrosin (Käse, Fisch), Omega-3, Wasser. Belastet: Zucker-Crash, Durst.",
+    tip: "Diese Zone leuchtet bei bestimmten Mahlzeitenwerten im Spiel. Sie zeigt keine Konzentration oder Gehirnfunktion einer Person.",
     spots: [{ x: 50, y: 10, r: 9 }],
   },
   {
     id: "schilddruese",
     label: "Schilddrüse",
     icon: "🦋",
-    tip: "Stärkt: Jod (Algen, Muscheln, Fisch). Ohne Jod läuft der Stoffwechsel auf Notstrom.",
+    tip: "Diese Zone verwendet den Jodwert der Spielzutaten. Daraus lässt sich keine Aussage über eine Schilddrüse ableiten.",
     spots: [{ x: 50, y: 21, r: 4.5 }],
   },
   {
     id: "blut",
     label: "Blut",
     icon: "🩸",
-    tip: "Stärkt: Eisen (Linsen, Kürbiskerne, Fisch) — Vitamin C hilft bei der Aufnahme. Im Blick behalten bei glutenfreier Kost.",
+    tip: "Diese Zone verwendet den Eisenwert der Spielzutaten. Blutwerte oder die Versorgung einer Person werden hier nicht erfasst.",
     spots: [{ x: 44, y: 32, r: 6 }],
   },
   {
     id: "darm",
     label: "Bauch & Darm",
     icon: "🌿",
-    tip: "Etwa 90 % des Serotonins entstehen hier. Stärkt: Ballaststoffe, Protein, Ruhe beim Essen. Belastet: Hetze, Einseitigkeit.",
+    tip: "Diese Zone leuchtet, solange eine Spielmahlzeit aktiv ist. Das Bild beschreibt keine tatsächliche Verdauung.",
     spots: [{ x: 50, y: 46, r: 7.5 }],
   },
   {
     id: "muskeln",
     label: "Muskeln",
     icon: "💪",
-    tip: "Stärkt: komplexe Kohlenhydrate (Kartoffeln, Vollkorn, Linsen), Magnesium, Protein. Belastet: Einfachzucker — kurzer Schub, dann das Loch.",
+    tip: "Diese Zone folgt dem zeitlich begrenzten Energiewert einer Spielmahlzeit. Daraus lässt sich keine körperliche Wirkung ableiten.",
     spots: [
       { x: 30, y: 34, r: 5 },
       { x: 70, y: 34, r: 5 },
@@ -65,16 +66,15 @@ interface ZoneStatus {
 }
 
 export function useBodyStatus(): Record<string, ZoneStatus> {
-  const [tick, setTick] = useState(0);
+  const paused = useInterfacePaused();
+  const [now, setNow] = useState(() => getWorld()?.getGameTime() ?? Date.now());
   useEffect(() => {
-    const id = window.setInterval(() => setTick((t) => t + 1), 1000);
+    if (paused) return;
+    const id = window.setInterval(() => { if (!areUiTimersPaused()) setNow(getWorld()?.getGameTime() ?? Date.now()); }, 1000);
     return () => window.clearInterval(id);
-  }, []);
-  void tick;
-
+  }, [paused]);
   const world = getWorld();
   const save = world?.getSave();
-  const now = Date.now();
   const meals = save?.activeMeals ?? [];
   const recent = save?.recentMicros ?? [];
 
@@ -87,29 +87,30 @@ export function useBodyStatus(): Record<string, ZoneStatus> {
   return {
     gehirn: {
       lit: kBonus > 0 || bScore >= 20,
-      reason: kBonus > 0 ? "Konzentrations-Wirkung aktiv" : bScore >= 20 ? "B-Vitamine zuletzt reichlich" : "",
+      reason: kBonus > 0 ? "Spielbonus Konzentration aktiv" : bScore >= 20 ? "B-Vitamin-Spielwert erreicht" : "",
     },
     schilddruese: {
       lit: microSum("iodine") >= 25,
-      reason: microSum("iodine") >= 25 ? "Jod zuletzt ausreichend" : "",
+      reason: microSum("iodine") >= 25 ? "Jod-Spielwert erreicht" : "",
     },
     blut: {
       lit: microSum("iron") >= 30,
-      reason: microSum("iron") >= 30 ? "Eisen zuletzt reichlich" : "",
+      reason: microSum("iron") >= 30 ? "Eisen-Spielwert erreicht" : "",
     },
     darm: {
       lit: meals.length > 0,
-      reason: meals.length > 0 ? "Verdauung läuft — Sättigung aktiv" : "",
+      reason: meals.length > 0 ? "Spielmahlzeit aktiv" : "",
     },
     muskeln: {
       lit: eBonus > 0,
       strained: crashing,
-      reason: eBonus > 0 ? "Energie-Wirkung aktiv" : crashing ? "Zucker-Crash — das Loch danach" : "",
+      reason: eBonus > 0 ? "Spielbonus Energie aktiv" : crashing ? "Spielbonus vorübergehend vermindert" : "",
     },
   };
 }
 
 export function BodyMap() {
+  const paused = useInterfacePaused();
   const status = useBodyStatus();
   const [hover, setHover] = useState<string | null>(null);
   const gfMode = getWorld()?.getSave().glutenFree ?? false;
@@ -138,7 +139,7 @@ export function BodyMap() {
             <g key={z.id} style={{ cursor: "pointer" }} onMouseEnter={() => setHover(z.id)} onMouseLeave={() => setHover(null)}>
               {z.spots.map((s, i) => (
                 <circle key={i} cx={s.x} cy={s.y} r={s.r} fill={col} opacity={0.28}>
-                  <animate attributeName="opacity" values="0.22;0.4;0.22" dur="3.2s" repeatCount="indefinite" />
+                  {!paused && <animate attributeName="opacity" values="0.22;0.4;0.22" dur="3.2s" repeatCount="indefinite" />}
                 </circle>
               ))}
               {z.spots.map((s, i) => (
@@ -190,7 +191,7 @@ export function BodyMap() {
                         : "bg-white/5 text-white/35"
                   }`}
                 >
-                  {st?.strained ? "belastet" : st?.lit ? "versorgt" : "ruhig"}
+                  {st?.strained ? "Spielabzug" : st?.lit ? "Spielwert aktiv" : "ohne Spielbonus"}
                 </span>
               </div>
               {active && <div className="text-[11px] text-white/60 mt-1.5 leading-relaxed">{z.tip}</div>}
@@ -199,13 +200,13 @@ export function BodyMap() {
           );
         })}
         <p className="text-[10px] text-white/35 leading-relaxed pt-1">
-          Die Karte zeigt, was du zuletzt gegessen hast und was gerade wirkt. Sie ist Wissensvermittlung, keine
-          medizinische Beratung.
+          Die Karte bildet Mahlzeiten deiner Spielfigur ab. Farben und Werte gehören zu den Spielregeln;
+          sie beschreiben keinen realen Körper und geben keine Ernährungs- oder Gesundheitsauskunft.
         </p>
         {/* Mangel-Wächter (nur Info): bei langem glutenfreien Spiel im Blick behalten */}
         {gfMode && (
           <div className="rounded-xl border border-amber-400/25 bg-amber-900/20 px-3 py-2.5 mt-2">
-            <div className="text-[11px] uppercase tracking-wider text-amber-200/75 mb-1.5">🌾 Mangel-Wächter (Glutenfrei-Modus)</div>
+            <div className="text-[11px] uppercase tracking-wider text-amber-200/75 mb-1.5">🌾 Zutatenwerte im Glutenfrei-Spielmodus</div>
             <div className="space-y-1">
               {GF_WATCH.map((w) => {
                 const sum = microSum(w.micro);
@@ -220,7 +221,8 @@ export function BodyMap() {
               })}
             </div>
             <p className="text-[10px] text-white/35 mt-1.5 leading-relaxed">
-              Bei Zöliakie sind diese vier öfter im Blick zu behalten — nur ein Hinweis, keine Diagnose.
+              Diese Zuordnung gehört zum Kochspiel. Sie prüft keine Mangelzustände und ersetzt keine
+              individuelle Ernährungsberatung.
             </p>
           </div>
         )}

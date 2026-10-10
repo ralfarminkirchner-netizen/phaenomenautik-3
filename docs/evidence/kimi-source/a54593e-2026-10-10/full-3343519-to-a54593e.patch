@@ -1,0 +1,777 @@
+diff --git a/qa/encounter.cjs b/qa/encounter.cjs
+new file mode 100644
+index 0000000..c90cf78
+--- /dev/null
++++ b/qa/encounter.cjs
+@@ -0,0 +1,130 @@
++// PHÄNOMENAUTIK — M4 QA: Strand-Begegnung End-to-End
++// Teleport zu einem Strandläufer, Prompt prüfen, begegnen, begreifen,
++// Register/Fog-Reveal/Persistenz verifizieren. Aufruf:
++//   node qa/serve-dist.cjs ist nicht nötig — dieses Skript serviert dist/ selbst.
++//   NODE_PATH=../traumaatlas-3/node_modules node qa/encounter.cjs
++const path = require("path");
++const { chromium } = require("playwright");
++const { serveDist } = require("./serve.cjs");
++
++const OUT = path.join(__dirname, "shots");
++const PORT = 3199;
++const QA_URL = process.env.QA_URL || `http://localhost:${PORT}/`; // gesetzt = gegen Produktion testen
++
++let pass = 0;
++let fail = 0;
++const ok = (cond, label, extra = "") => {
++  if (cond) {
++    pass++;
++    console.log(`  ✓ ${label}`);
++  } else {
++    fail++;
++    console.log(`  ✗ ${label} ${extra}`);
++  }
++};
++
++(async () => {
++  const srv = process.env.QA_URL ? null : await serveDist(PORT);
++  const browser = await chromium.launch({ args: ["--use-angle=metal", "--enable-gpu", "--ignore-gpu-blocklist"] });
++  const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 } });
++  await ctx.addInitScript(() => localStorage.clear());
++  const page = await ctx.newPage();
++  const errors = [];
++  page.on("console", (m) => {
++    if (m.type() === "error") errors.push(m.text().slice(0, 300));
++  });
++  page.on("pageerror", (e) => errors.push(String(e).slice(0, 300)));
++
++  try {
++    await page.goto(QA_URL, { waitUntil: "load" });
++    await page.waitForTimeout(1500);
++    await page.click("text=Neue Reise");
++    await page.waitForTimeout(600);
++    for (let i = 0; i < 14; i++) {
++      await page.mouse.click(800, 450);
++      await page.waitForTimeout(160);
++    }
++    await page.waitForSelector("canvas", { timeout: 30000 });
++    await page.waitForFunction(() => !!window.__game, { timeout: 30000 });
++    await page.waitForTimeout(6000);
++
++    // 1) Strandläufer vorhanden?
++    const wisps = await page.evaluate(() => window.__game.wispList);
++    ok(wisps.length === 6, `6 Strandläufer aktiv (ist: ${wisps.length})`, JSON.stringify(wisps));
++    const target = wisps.find((w) => w.nodeId === "atemdruck") ?? wisps[0];
++    console.log(`  · Ziel: ${target.nodeId} @ ${Math.round(target.x)},${Math.round(target.z)}`);
++
++    // 2) Teleport zum Strandläufer (zu Fuß)
++    await page.evaluate(({ x, z }) => {
++      const g = window.__game;
++      const y = g.groundAt(x + 1.5, z);
++      g.save.mode = "onfoot";
++      g.player.place(x + 1.5, y, z, 0);
++      g.player.group.visible = true;
++      g.ship.moored = true;
++    }, target);
++    await page.waitForTimeout(800);
++
++    // 3) Prompt erscheint mit Namen
++    const prompt = await page.evaluate(() => window.__game.currentPrompt?.text ?? null);
++    ok(!!prompt && prompt.includes("Strand-Begegnung"), `Prompt zeigt Strand-Begegnung (ist: „${prompt}“)`);
++    await page.screenshot({ path: path.join(OUT, "encounter-prompt.png") });
++
++    // 4) Begegnung öffnen (Taste E)
++    await page.keyboard.press("e");
++    await page.waitForTimeout(700);
++    const overlayText = await page.evaluate(() => document.body.textContent ?? "");
++    const nodeName = await page.evaluate((id) => window.__game.save.graph.met.includes(id), target.nodeId);
++    ok(nodeName, "Knoten als „begegnet“ im Spielstand vermerkt");
++    ok(overlayText.includes("Strand-Begegnung"), "Overlay zeigt Begegnungs-Header");
++
++    // 5) Durch das Verstehen-Mini schreiten bis zur Friedenszeile
++    for (let i = 0; i < 6; i++) {
++      const hasRegister = await page.evaluate(() => (document.body.textContent ?? "").includes("Ins Register aufnehmen"));
++      if (hasRegister) break;
++      await page.keyboard.press("e");
++      await page.waitForTimeout(450);
++    }
++    const finalVisible = await page.evaluate(() => (document.body.textContent ?? "").includes("Ins Register aufnehmen"));
++    ok(finalVisible, "Friedenszeile + Register-Button erreicht");
++    await page.screenshot({ path: path.join(OUT, "encounter-final.png") });
++
++    // 6) Begreifen abschließen
++    await page.click("text=Ins Register aufnehmen");
++    await page.waitForTimeout(700);
++    const after = await page.evaluate((id) => {
++      const g = window.__game;
++      return {
++        understood: g.save.graph.understood.includes(id),
++        wisps: g.wispList.map((w) => w.nodeId),
++        xp: g.save.player.xp,
++        overlayGone: !(document.body.textContent ?? "").includes("Ins Register aufnehmen"),
++      };
++    }, target.nodeId);
++    ok(after.understood, "Knoten als „begriffen“ im Atlas-Register (save.graph.understood)");
++    ok(!after.wisps.includes(target.nodeId), "Strandläufer hat sich aufgelöst");
++    ok(after.xp >= 8, `Einsicht vergeben (xp: ${after.xp})`);
++    ok(after.overlayGone, "Overlay geschlossen");
++
++    // 7) Persistenz: localStorage enthält den Fortschritt
++    const persisted = await page.evaluate((id) => {
++      const raw = localStorage.getItem("phaenomenautik3-save-v1");
++      if (!raw) return false;
++      const s = JSON.parse(raw);
++      return Array.isArray(s.graph?.understood) && s.graph.understood.includes(id);
++    }, target.nodeId);
++    ok(persisted, "Fortschritt persistiert (localStorage, save.graph)");
++
++    // 8) Nebel-Reveal: panik (Nachbar von atemdruck) ist nach dem Begreifen aus dem Nebel
++    const fogPanik = await page.evaluate(() => window.__game.fogOf("panik"));
++    ok(fogPanik === "befahrbar" || fogPanik === "sichtbar", `Nachbar „panik“ ist aus dem Nebel (fogOf: ${fogPanik})`);
++
++    ok(errors.length === 0, `0 Konsolenfehler (ist: ${errors.length})`, errors.join(" | "));
++  } finally {
++    await browser.close();
++    srv?.close();
++  }
++
++  console.log(`\n${pass}/${pass + fail} Checks bestanden`);
++  process.exit(fail ? 1 : 0);
++})();
+diff --git a/src/App.tsx b/src/App.tsx
+index ecc96dd..ab56017 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -9,6 +9,7 @@ import { JournalOverlay, LoreOverlay } from "./ui/JournalOverlay";
+ import { ChatOverlay } from "./ui/ChatOverlay";
+ import { CookOverlay } from "./ui/CookOverlay";
+ import { DuelOverlay } from "./ui/DuelOverlay";
++import { EncounterOverlay } from "./ui/EncounterOverlay";
+ import { loadSave, newGame, type SaveGame } from "./game/state";
+ import { startWorld } from "./game/runtime";
+ import { store } from "./game/store";
+@@ -69,6 +70,7 @@ export default function App() {
+           <ChatOverlay />
+           <CookOverlay />
+           <DuelOverlay />
++          <EncounterOverlay />
+         </>
+       )}
+       {phase === "title" && (
+diff --git a/src/game/encounters.ts b/src/game/encounters.ts
+new file mode 100644
+index 0000000..f42a663
+--- /dev/null
++++ b/src/game/encounters.ts
+@@ -0,0 +1,77 @@
++// ═══════════════════════════════════════════════════════════════════
++// PHÄNOMENAUTIK — M4: Strand-Begegnungen (Stufe 1, Brief §1.4/§6.1)
++// Sechs „Strandläufer“ auf den zwei Kontinenten der ersten Stunde
++// (Alarm-Atoll & Glaswelt): kurz, wahr, freundlich — eine Zeile zum
++// Ankommen, ein Verstehen-Mini, eine Friedenszeile, eine wahre Zeile
++// fürs Atlas-Register. Kein Kampf, kein Fangen — Begreifen.
++// ═══════════════════════════════════════════════════════════════════
++
++import { ISLANDS, terrainHeight, terrainSlope } from "./worldLayout";
++import { NODE_BY_ID, fogStateOf, hashId, type GraphProgress, type PhenomenonNode } from "./phenomenaGraph";
++import { mulberry32 } from "./noise";
++
++export interface StrandEncounterDef {
++  nodeId: string;
++  islandId: string; // Gastgeber-Insel (bestehende Landmasse)
++  x: number;
++  z: number;
++  y: number; // Bodenhöhe am Strandpunkt
++}
++
++// Die sechs Starter — alle Nachbarn alter Hauptstädte (s. visibilityRule).
++const HOST_ISLAND: Record<string, string> = {
++  atemdruck: "herzrasen", // Alarm-Atoll
++  tunnelblick: "hypervigilanz",
++  motor: "hypervigilanz",
++  zeitverlust: "dissoziation", // Glaswelt
++  schalter: "erstarrung",
++  glaspanzer: "erstarrung",
++};
++
++export const STRAND_IDS: readonly string[] = Object.keys(HOST_ISLAND);
++
++/** Strandpunkt auf der Gastgeber-Insel: deterministisch, flach, über der Wasserlinie */
++function beachPoint(nodeId: string, islandId: string): { x: number; z: number; y: number } {
++  const isl = ISLANDS.find((i) => i.id === islandId);
++  if (!isl) throw new Error(`Unbekannte Gastgeber-Insel: ${islandId}`);
++  const rng = mulberry32(hashId(nodeId));
++  for (let tries = 0; tries < 60; tries++) {
++    const a = rng() * Math.PI * 2;
++    const r = (0.55 + rng() * 0.35) * isl.radius;
++    const x = isl.x + Math.cos(a) * r;
++    const z = isl.z + Math.sin(a) * r;
++    const y = terrainHeight(x, z);
++    if (y > 0.8 && y < 5 && terrainSlope(x, z) < 0.28) return { x, y, z };
++  }
++  // Fallback: Schrein-Nähe (immer begehbar)
++  return { x: isl.x, y: terrainHeight(isl.x, isl.z + isl.radius * 0.3), z: isl.z + isl.radius * 0.3 };
++}
++
++export const STRAND_ENCOUNTERS: readonly StrandEncounterDef[] = STRAND_IDS.map((nodeId) => ({
++  nodeId,
++  islandId: HOST_ISLAND[nodeId],
++  ...beachPoint(nodeId, HOST_ISLAND[nodeId]),
++}));
++
++/** Node-Objekt zur Begegnung (wirft bei unbekannter Id — Datenfehler früh zeigen) */
++export function encounterNode(nodeId: string): PhenomenonNode {
++  const n = NODE_BY_ID.get(nodeId);
++  if (!n) throw new Error(`Unbekannter Begegnungs-Knoten: ${nodeId}`);
++  return n;
++}
++
++/**
++ * Sichtbarkeit in der Welt (nicht der Karte): Die sechs Strandläufer
++ * halten sich in den Gewässern der alten Hauptstädte auf — sie sind
++ * von Anfang an da, weil die Hauptstädte ihre Umgebung ausleuchten.
++ * Tiefere Knoten folgen dem Nebel (sichtbar/befahrbar/begegnet).
++ */
++export function strandVisible(nodeId: string, p: GraphProgress): boolean {
++  if (p.understood.includes(nodeId)) return false; // begriffene lösen sich auf (Friedenszeile)
++  const fog = fogStateOf(nodeId, p);
++  if (fog !== "verborgen") return true;
++  for (const nb of NODE_BY_ID.get(nodeId)?.edges ?? []) {
++    if (NODE_BY_ID.get(nb.to)?.legacy) return true;
++  }
++  return false;
++}
+diff --git a/src/game/store.ts b/src/game/store.ts
+index ec82d73..dc8bb27 100644
+--- a/src/game/store.ts
++++ b/src/game/store.ts
+@@ -27,6 +27,7 @@ export interface HudState {
+   dead: boolean;
+   dialogNpc: string | null;
+   battlePhen: string | null;
++  encounterId: string | null; // aktive Strand-Begegnung (M4)
+   journalOpen: boolean;
+   loreStone: string | null; // Id des offenen Lore-Steins
+   chatOpen: boolean;
+@@ -65,6 +66,7 @@ export const initialHud: HudState = {
+   dead: false,
+   dialogNpc: null,
+   battlePhen: null,
++  encounterId: null,
+   journalOpen: false,
+   loreStone: null,
+   chatOpen: false,
+diff --git a/src/three/ship.ts b/src/three/ship.ts
+index cda6084..5cc297f 100644
+--- a/src/three/ship.ts
++++ b/src/three/ship.ts
+@@ -36,9 +36,9 @@ export class Ship {
+     model.rotation.y = MODEL_YAW;
+     setShadows(model, true, false);
+     this.group.add(model);
+-    // Segel-Knoten für Einholen/Aussetzen
++    // Segel-Knoten für Einholen/Aussetzen (GLB-Namen: Front_Sail mit Unterstrich!)
+     model.traverse((o) => {
+-      if (["BackSail", "Front Sail", "MidleSail"].includes(o.name)) this.sailNodes.push(o);
++      if (["BackSail", "Front_Sail", "MidleSail"].includes(o.name)) this.sailNodes.push(o);
+     });
+ 
+     scene.add(this.group);
+diff --git a/src/three/sky.ts b/src/three/sky.ts
+index eac1828..8fa14f7 100644
+--- a/src/three/sky.ts
++++ b/src/three/sky.ts
+@@ -109,9 +109,9 @@ export function paletteFor(timeOfDay: number, storm: number): SkyPalette {
+   const dusk = (1 - Math.abs(elevation - 0.12) / 0.2) * (elevation > -0.1 ? 1 : 0);
+   const duskC = clamp(dusk, 0, 1) * (1 - storm * 0.6);
+ 
+-  const zenithDay = new THREE.Color(0.12, 0.34, 0.72);
++  const zenithDay = new THREE.Color(0.1, 0.3, 0.7);
+   const zenithNight = new THREE.Color(0.012, 0.02, 0.06);
+-  const horizonDay = new THREE.Color(0.5, 0.72, 0.88);
++  const horizonDay = new THREE.Color(0.44, 0.66, 0.86);
+   const horizonNight = new THREE.Color(0.045, 0.07, 0.14);
+   const duskTint = new THREE.Color(0.98, 0.52, 0.28);
+ 
+@@ -132,7 +132,7 @@ export function paletteFor(timeOfDay: number, storm: number): SkyPalette {
+     sunColor,
+     fog,
+     sunIntensity: lerp(0.02, 2.6, day) * (1 - storm * 0.55),
+-    hemiIntensity: lerp(0.16, 0.85, day) * (1 - storm * 0.4),
++    hemiIntensity: lerp(0.15, 0.78, day) * (1 - storm * 0.4),
+     night: 1 - day,
+   };
+ }
+diff --git a/src/three/water.ts b/src/three/water.ts
+index 95d9c62..ae06c87 100644
+--- a/src/three/water.ts
++++ b/src/three/water.ts
+@@ -352,15 +352,21 @@ export class Water {
+     scene.add(this.mesh);
+   }
+ 
+-  /** Qualitätsumschaltung (Performance-Budget). „lo" schaltet auch die
+-   *  planare Reflexion ab — der analytische Himmel bleibt als Reflexion. */
++  /** Qualitätsumschaltung (Performance-Budget). „lo" schaltet die
++   *  Detail-Geometrie ab; die planare Reflexion wird separat gesteuert. */
+   setHighQuality(hi: boolean) {
+-    this.reflEnabled = hi;
+     if (hi === this.useHi) return;
+     this.useHi = hi;
+     this.mesh.geometry = hi ? this.hiGeo : this.loGeo;
+   }
+ 
++  /** Planare Reflexion separat schalten (Qualitätsleiter: Stufe 2 = selten, 3 = aus).
++   *  Beim Abschalten uReflOn sofort auf 0 — sonst friert das letzte Spiegelbild ein. */
++  setReflection(on: boolean) {
++    this.reflEnabled = on;
++    if (!on) this.mat.uniforms.uReflOn.value = 0;
++  }
++
+   /** Reflexions-Target an den Viewport koppeln (halbe Auflösung). */
+   setReflSize(wCss: number, hCss: number, pixelRatio: number) {
+     this.reflRT.setSize(
+diff --git a/src/three/wisps.ts b/src/three/wisps.ts
+new file mode 100644
+index 0000000..2bcb82a
+--- /dev/null
++++ b/src/three/wisps.ts
+@@ -0,0 +1,126 @@
++// PHÄNOMENAUTIK — M4: Strandläufer (Wisps)
++// Kleine leuchtende Phänomen-Gestalten am Strand: Glühkern + Hülle +
++// drei kreisende Funken. Distanz-gated, lösen sich beim Begreifen auf.
++
++import * as THREE from "three";
++import type { ParticleSystem } from "./particles";
++import { STRAND_ENCOUNTERS, encounterNode, strandVisible, type StrandEncounterDef } from "../game/encounters";
++import type { GraphProgress, PhenomenonNode } from "../game/phenomenaGraph";
++
++interface WispItem {
++  def: StrandEncounterDef;
++  node: PhenomenonNode;
++  obj: THREE.Group;
++  core: THREE.Mesh;
++  motes: THREE.Object3D[];
++  phase: number;
++}
++
++export class Wisps {
++  private items: WispItem[] = [];
++  private scene: THREE.Scene;
++
++  constructor(scene: THREE.Scene, progress: GraphProgress) {
++    this.scene = scene;
++    for (const def of STRAND_ENCOUNTERS) {
++      if (!strandVisible(def.nodeId, progress)) continue;
++      this.spawn(def);
++    }
++  }
++
++  private spawn(def: StrandEncounterDef) {
++    const node = encounterNode(def.nodeId);
++    const tint = new THREE.Color().setHSL((((node.hue % 360) + 360) % 360) / 360, 0.85, 0.6);
++
++    const obj = new THREE.Group();
++    const core = new THREE.Mesh(
++      new THREE.IcosahedronGeometry(0.55, 1),
++      new THREE.MeshStandardMaterial({
++        color: tint.clone().multiplyScalar(0.5),
++        emissive: tint,
++        emissiveIntensity: 1.5,
++        roughness: 0.35,
++      }),
++    );
++    obj.add(core);
++
++    const shell = new THREE.Mesh(
++      new THREE.IcosahedronGeometry(0.95, 1),
++      new THREE.MeshBasicMaterial({ color: tint, transparent: true, opacity: 0.22, depthWrite: false }),
++    );
++    obj.add(shell);
++
++    const motes: THREE.Object3D[] = [];
++    for (let i = 0; i < 3; i++) {
++      const mote = new THREE.Mesh(
++        new THREE.SphereGeometry(0.09, 6, 6),
++        new THREE.MeshBasicMaterial({ color: tint.clone().lerp(new THREE.Color(1, 1, 1), 0.55) }),
++      );
++      mote.userData.phase = (i / 3) * Math.PI * 2;
++      motes.push(mote);
++      obj.add(mote);
++    }
++
++    obj.position.set(def.x, def.y + 1.5, def.z);
++    this.scene.add(obj);
++    this.items.push({ def, node, obj, core, motes, phase: Math.random() * Math.PI * 2 });
++  }
++
++  /** Nächster aktiver Strandläufer im Radius r (für die Interaktion) */
++  nearest(x: number, z: number, r: number): WispItem | null {
++    let best: WispItem | null = null;
++    let bd = r * r;
++    for (const w of this.items) {
++      const d2 = (w.def.x - x) ** 2 + (w.def.z - z) ** 2;
++      if (d2 < bd) {
++        bd = d2;
++        best = w;
++      }
++    }
++    return best;
++  }
++
++  /** QA/Register: aktive Strandläufer mit Position */
++  list(): { nodeId: string; x: number; z: number }[] {
++    return this.items.map((w) => ({ nodeId: w.node.id, x: w.def.x, z: w.def.z }));
++  }
++
++  /** Begreifen: auflösen (Funkensturm) und aus der Welt nehmen */
++  dissolve(nodeId: string, particles: ParticleSystem) {
++    const idx = this.items.findIndex((w) => w.node.id === nodeId);
++    if (idx < 0) return;
++    const w = this.items[idx];
++    particles.burst(46, {
++      x: w.obj.position.x,
++      y: w.obj.position.y,
++      z: w.obj.position.z,
++      vy: 3.2,
++      spread: 4.5,
++      life: 1.8,
++      size: 1.8,
++      color: [1.0, 0.92, 0.65],
++      gravity: -1.2,
++      drag: 0.95,
++    });
++    this.scene.remove(w.obj);
++    this.items.splice(idx, 1);
++  }
++
++  update(t: number, focus: THREE.Vector3) {
++    for (const w of this.items) {
++      const dx = w.def.x - focus.x;
++      const dz = w.def.z - focus.z;
++      const near = dx * dx + dz * dz <= 220 * 220; // Sicht-Gating (Performance-Budget)
++      if (w.obj.visible !== near) w.obj.visible = near;
++      if (!near) continue;
++      w.obj.position.y = w.def.y + 1.5 + Math.sin(t * 1.6 + w.phase) * 0.28;
++      w.obj.rotation.y = t * 0.5 + w.phase;
++      const breathe = 1 + Math.sin(t * 2.3 + w.phase) * 0.08;
++      w.core.scale.setScalar(breathe);
++      for (const mote of w.motes) {
++        const ph = (mote.userData.phase as number) + t * 1.4;
++        mote.position.set(Math.cos(ph) * 1.25, Math.sin(ph * 1.7) * 0.5, Math.sin(ph) * 1.25);
++      }
++    }
++  }
++}
+diff --git a/src/three/world.ts b/src/three/world.ts
+index 6b414c9..938f445 100644
+--- a/src/three/world.ts
++++ b/src/three/world.ts
+@@ -21,11 +21,13 @@ import { Structures, buildFloss, buildLeiter, buildBruecke, buildVentilator, bui
+ import { BUILDABLES, missingMaterials, matName, matCostText, type BuildableDef } from "../game/materials";
+ import { LoreStones } from "./lorestones";
+ import { Creature } from "./creature";
++import { Wisps } from "./wisps";
+ import { CliffWalls } from "./cliffwalls";
+ import { CLIMB_WALLS, cliffTopAt } from "../game/climb";
+ import { computeDish, mealsToActive, mealBonus, pruneMeals, ingById, type DishResult } from "../game/cooking";
+ import { shrinePoint } from "../game/worldLayout";
+ import { PHENOMENA } from "../game/data";
++import { NODE_BY_ID, revealedByUnderstanding, fogStateOf } from "../game/phenomenaGraph";
+ import { audio } from "../game/audio";
+ import { store } from "../game/store";
+ import { preloadAll, extractMerged, getModel, setShadows } from "./assets";
+@@ -81,6 +83,7 @@ export class GameWorld {
+   private npcs!: Npcs;
+   private loreStones!: LoreStones;
+   private creatures = new Map<string, Creature>();
++  private wisps!: Wisps; // Strandläufer (M4)
+   private echoOrb: THREE.Mesh | null = null;
+   private loot!: Loot;
+   private structures!: Structures;
+@@ -160,6 +163,9 @@ export class GameWorld {
+     // Lore-Runensteine
+     this.loreStones = new LoreStones(this.scene, save.echoesFound);
+ 
++    // Strandläufer (M4): sechs Strand-Begegnungen auf Alarm-Atoll & Glaswelt
++    this.wisps = new Wisps(this.scene, save.graph);
++
+     // Sammelbare Materialien + gebaute Strukturen
+     this.loot = new Loot(this.scene, save.lootTaken);
+     this.structures = new Structures(this.scene, save.structures);
+@@ -259,7 +265,7 @@ export class GameWorld {
+ 
+   get uiLock(): boolean {
+     const st = store.get();
+-    return !!(st.menuOpen || st.dead || st.dialogNpc || st.battlePhen || st.journalOpen || st.loreStone || st.chatOpen || st.cookOpen || st.duelId);
++    return !!(st.menuOpen || st.dead || st.dialogNpc || st.battlePhen || st.encounterId || st.journalOpen || st.loreStone || st.chatOpen || st.cookOpen || st.duelId);
+   }
+ 
+   // ── Eingaben ─────────────────────────────────────────────────────
+@@ -293,8 +299,8 @@ export class GameWorld {
+         store.set({ chatOpen: false });
+       } else if (st.cookOpen) {
+         store.set({ cookOpen: false });
+-      } else if (st.journalOpen || st.dialogNpc || st.loreStone) {
+-        store.set({ journalOpen: false, dialogNpc: null, loreStone: null });
++      } else if (st.journalOpen || st.dialogNpc || st.loreStone || st.encounterId) {
++        store.set({ journalOpen: false, dialogNpc: null, loreStone: null, encounterId: null });
+       } else if (!st.battlePhen && !st.duelId) {
+         store.set({ menuOpen: !st.menuOpen });
+       }
+@@ -463,6 +469,17 @@ export class GameWorld {
+       return;
+     }
+ 
++    // Strand-Begegnung (M4): kleine Phänomen-Gestalten am Strand
++    const wisp = this.wisps.nearest(p.x, p.z, 3.4);
++    if (wisp) {
++      this.currentPrompt = {
++        key: "E",
++        text: `Strand-Begegnung: ${wisp.node.name} — ${wisp.node.epithet}`,
++        action: () => this.openEncounter(wisp.node.id),
++      };
++      return;
++    }
++
+     // Hinterlassenes Echo aufnehmen
+     if (this.save.echoDrop) {
+       const ed = this.save.echoDrop;
+@@ -884,6 +901,41 @@ export class GameWorld {
+     this.persist();
+   }
+ 
++  // ── Strand-Begegnungen (M4) ──────────────────────────────────────
++  /** Begegnung öffnen: als „begegnet“ vermerken, Overlay zeigen */
++  openEncounter(nodeId: string) {
++    if (!NODE_BY_ID.has(nodeId)) return;
++    if (!this.save.graph.met.includes(nodeId)) this.save.graph.met.push(nodeId);
++    if (document.pointerLockElement) document.exitPointerLock();
++    audio.select();
++    store.set({ encounterId: nodeId });
++    this.persist();
++  }
++
++  /** Begegnung abschließen: begriffen — Register, Einsicht, Nebel-Reveal */
++  completeStrandEncounter(nodeId: string) {
++    const node = NODE_BY_ID.get(nodeId);
++    if (!node) {
++      store.set({ encounterId: null });
++      return;
++    }
++    if (!this.save.graph.understood.includes(nodeId)) {
++      // Reveal vor dem Eintragen berechnen (Vorher-Nebelstand)
++      const revealed = revealedByUnderstanding(nodeId, this.save.graph);
++      this.save.graph.understood.push(nodeId);
++      grantXp(this.save.player, 8);
++      const names = revealed.map((id) => NODE_BY_ID.get(id)?.name ?? id).slice(0, 3);
++      store.toast(node.text.insight, "good");
++      if (names.length > 0) {
++        store.toast(`Aus dem Nebel taucht: ${names.join(", ")} …`, "info");
++      }
++      audio.understand();
++      this.wisps.dissolve(nodeId, this.particles);
++    }
++    store.set({ encounterId: null });
++    this.persist();
++  }
++
+   openDialog(npcId: string) {
+     // Rededuell (M3): Vessa startet ihr Duell statt des freien Dialogs
+     if (npcId === "vessa" && !this.save.duelsDone.includes("duell_vessa")) {
+@@ -1179,6 +1231,16 @@ export class GameWorld {
+     return this.save;
+   }
+ 
++  /** QA-Hook (M4): aktive Strandläufer mit Positionen */
++  get wispList(): { nodeId: string; x: number; z: number }[] {
++    return this.wisps.list();
++  }
++
++  /** QA-Hook (M4): Nebel-Zustand eines Graph-Knotens */
++  fogOf(nodeId: string): string {
++    return fogStateOf(nodeId, this.save.graph);
++  }
++
+   // ── Persistenz ───────────────────────────────────────────────────
+   private persist() {
+     this.save.ship = { x: this.ship.x, z: this.ship.z, heading: this.ship.heading };
+@@ -1419,6 +1481,7 @@ export class GameWorld {
+     // NPCs & Lore-Steine
+     this.npcs.update(dt, this.player.pos, this.uiLock);
+     this.loreStones.update(t, this.camera.position);
++    this.wisps.update(t, focus);
+ 
+     // Echo-Orb schwebt
+     if (this.echoOrb) {
+@@ -1499,9 +1562,10 @@ export class GameWorld {
+ 
+     this.updateClouds(dt, focus);
+     this.bloom.enabled = this.qualityLevel < 3;
+-    // Planare Wasser-Reflexion (Qualität Hoch): Spiegel-Pass vor dem Hauptbild,
+-    // jeden 2. Frame — Wellen bewegen sich langsam genug für 30 Hz-Spiegel
+-    if (this.qualityLevel < 2 && (this.reflFrame++ & 1) === 0)
++    // Planare Wasser-Reflexion, gestaffelt: Stufe 0/1 = jedes 2. Frame (30 Hz),
++    // Stufe 2 = jedes 4. Frame (15 Hz), Stufe 3 = aus (analytischer Himmel bleibt)
++    const reflEvery = this.qualityLevel < 2 ? 2 : this.qualityLevel === 2 ? 4 : 0;
++    if (reflEvery > 0 && this.reflFrame++ % reflEvery === 0)
+       this.water.renderReflection(this.renderer, this.scene, this.camera);
+     this.composer.render();
+   };
+@@ -1539,22 +1603,44 @@ export class GameWorld {
+   };
+ 
+   private applyQuality() {
++    // M4.1-Lektion: Schatten NIE ganz aus (ohne sie „schwebt“ alles) —
++    // stattdessen die Schatten-Map verkleinern; Reflexion gestaffelt ausdünnen.
++    const sunShadow = this.sky.sun.shadow;
++    const setShadowRes = (px: number) => {
++      if (sunShadow.mapSize.x !== px) {
++        sunShadow.mapSize.set(px, px);
++        sunShadow.map?.dispose();
++        sunShadow.map = null;
++      }
++    };
+     switch (this.qualityLevel) {
+       case 0:
+         this.composer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
+         this.water.setHighQuality(true);
++        this.water.setReflection(true);
++        setShadowRes(2048);
+         this.renderer.shadowMap.enabled = true;
+         break;
+       case 1:
+         this.composer.setPixelRatio(1.25);
++        this.water.setHighQuality(true);
++        this.water.setReflection(true);
++        setShadowRes(1536);
++        this.renderer.shadowMap.enabled = true;
+         break;
+       case 2:
+         this.composer.setPixelRatio(1);
+         this.water.setHighQuality(false);
++        this.water.setReflection(true); // selten aktualisiert (Loop: jedes 4. Frame)
++        setShadowRes(1024);
++        this.renderer.shadowMap.enabled = true;
+         break;
+       case 3:
+-        this.renderer.shadowMap.enabled = false;
+         this.composer.setPixelRatio(0.85);
++        this.water.setHighQuality(false);
++        this.water.setReflection(false);
++        setShadowRes(512); // Schatten bleiben — klein, aber da
++        this.renderer.shadowMap.enabled = true;
+         break;
+     }
+   }
+diff --git a/src/ui/EncounterOverlay.tsx b/src/ui/EncounterOverlay.tsx
+new file mode 100644
+index 0000000..035f516
+--- /dev/null
++++ b/src/ui/EncounterOverlay.tsx
+@@ -0,0 +1,109 @@
++// PHÄNOMENAUTIK — M4: Strand-Begegnung (Stufe 1)
++// Leichtes Overlay: eine Zeile zum Ankommen, Verstehen-Mini (Zeilen
++// durchschreiten), Friedenszeile + wahre Zeile, dann ins Atlas-Register.
++// Tonlage: Zärtlichkeit. Begreifen statt Fangen.
++
++import { useCallback, useEffect, useState } from "react";
++import { store } from "../game/store";
++import { getWorld } from "../game/runtime";
++import { audio } from "../game/audio";
++import { encounterNode } from "../game/encounters";
++import { CLUSTER_BY_ID } from "../game/phenomenaGraph";
++
++export function EncounterOverlay() {
++  const [encounterId, setEncounterId] = useState(store.get().encounterId);
++  useEffect(() => store.subscribe(() => setEncounterId(store.get().encounterId)), []);
++  if (!encounterId) return null;
++  return <EncounterInner key={encounterId} nodeId={encounterId} />;
++}
++
++function EncounterInner({ nodeId }: { nodeId: string }) {
++  const node = encounterNode(nodeId);
++  const cluster = CLUSTER_BY_ID.get(node.cluster);
++  const lines = [node.text.intro, ...node.text.verstehen];
++  const [step, setStep] = useState(0);
++  const onFinal = step >= lines.length;
++
++  const advance = useCallback(() => {
++    if (onFinal) return;
++    audio.select();
++    setStep((s) => s + 1);
++  }, [onFinal]);
++
++  // Tastatur: E / Enter / Leertaste schreiten weiter
++  useEffect(() => {
++    const h = (ev: KeyboardEvent) => {
++      const k = ev.key.toLowerCase();
++      if (k === "e" || k === "enter" || k === " ") {
++        ev.preventDefault();
++        advance();
++      }
++    };
++    window.addEventListener("keydown", h);
++    return () => window.removeEventListener("keydown", h);
++  }, [advance]);
++
++  const complete = () => {
++    getWorld()?.completeStrandEncounter(nodeId);
++  };
++
++  const close = () => {
++    audio.cancel();
++    store.set({ encounterId: null });
++  };
++
++  return (
++    <div className="absolute inset-x-0 bottom-0 z-30 pointer-events-auto flex justify-center px-4 pb-6">
++      <div className="w-full max-w-xl rounded-2xl border border-white/15 bg-[#0d1522]/92 backdrop-blur-md shadow-2xl overflow-hidden">
++        <div className="flex items-center justify-between px-4 py-2.5 bg-black/40 border-b border-white/10">
++          <div>
++            <span className="font-bold text-amber-100">{node.name}</span>
++            <span className="ml-2 text-xs italic text-white/50">{node.epithet}</span>
++          </div>
++          <div className="flex items-center gap-2">
++            <span className="text-[10px] uppercase tracking-wider text-white/40">
++              Strand-Begegnung{cluster ? ` · ${cluster.name}` : ""}
++            </span>
++            <button className="text-white/50 hover:text-white text-lg px-2" onClick={close} title="Später weiter (Esc)">
++              ✕
++            </button>
++          </div>
++        </div>
++
++        <div className="px-5 py-4 min-h-[92px]">
++          {!onFinal ? (
++            <p className="text-sm leading-relaxed text-sky-50 whitespace-pre-wrap">{lines[step]}</p>
++          ) : (
++            <div className="space-y-3">
++              <p className="text-sm leading-relaxed text-emerald-100 whitespace-pre-wrap">{node.text.frieden}</p>
++              <p className="text-xs leading-relaxed text-white/60 border-l-2 border-amber-200/40 pl-3">
++                {node.text.insight}
++              </p>
++            </div>
++          )}
++        </div>
++
++        <div className="px-4 pb-3 flex items-center justify-between">
++          <span className="text-[10px] text-white/35">
++            {onFinal ? "Die wahre Zeile wandert ins Atlas-Register" : `Hinhören · ${step + 1} / ${lines.length}`}
++          </span>
++          {onFinal ? (
++            <button
++              onClick={complete}
++              className="rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-semibold px-4 py-1.5 text-sm transition"
++            >
++              Ins Register aufnehmen
++            </button>
++          ) : (
++            <button
++              onClick={advance}
++              className="rounded-lg bg-white/[0.08] hover:bg-white/[0.15] border border-white/15 px-4 py-1.5 text-sm text-white/85 transition"
++            >
++              {step === 0 ? "Hinhören" : "Weiter"} [E]
++            </button>
++          )}
++        </div>
++      </div>
++    </div>
++  );
++}
