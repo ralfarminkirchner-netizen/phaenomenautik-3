@@ -29,7 +29,14 @@ const MIME = {
 
 http
   .createServer((req, res) => {
-    let p = decodeURIComponent((req.url || "/").split("?")[0]);
+    let p;
+    try {
+      p = decodeURIComponent((req.url || "/").split("?")[0]);
+    } catch {
+      // A malformed request must not stop the production server.
+      res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+      return res.end("bad request");
+    }
     if (p === "/") p = "/index.html";
     let file = path.normalize(path.join(root, p));
     if (!file.startsWith(root)) {
