@@ -1805,10 +1805,13 @@ export class GameWorld {
     this.qualityTimer += dt;
     if (this.qualityTimer > 4) {
       this.qualityTimer = 0;
-      if (this.fpsEma < 44 && this.qualityLevel < 3) {
+      // Stufe runter bei < 52 FPS: die EMA pendelt sich sonst knapp über dem
+      // alten Schwellwert (44) ein und das Bild blieb dauerhaft bei ~45 FPS.
+      // Hysterese: hoch erst bei > 58,5 — kein Pendeln zwischen zwei Stufen.
+      if (this.fpsEma < 52 && this.qualityLevel < 3) {
         this.qualityLevel++;
         this.applyQuality();
-      } else if (this.fpsEma > 57 && this.qualityLevel > 0) {
+      } else if (this.fpsEma > 58.5 && this.qualityLevel > 0) {
         this.qualityLevel--;
         this.applyQuality();
       }
