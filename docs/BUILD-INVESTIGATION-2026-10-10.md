@@ -19,6 +19,11 @@ in Produktion bereitgestellt.
 - Die acht Fehlbenachrichtigungen bestätigen fehlgeschlagene Deployments,
   enthalten aber keine Buildfehler. Ohne die zugriffsgeschützten Buildlogs
   ist keine vollständige Ursachenfeststellung für jeden Lauf möglich.
+- Die drei `-live`-Fehlereignisse lassen sich über öffentliche GitHub-
+  Commitstatuses exakt den Commits `2acdec9`, `6323180` und `82f6124`
+  zuordnen. Für denselben Live-Service meldet `f16a827` später am 9.10.
+  um 12:26:59 MESZ `success`. Das ist ein historischer Deployment-Nachweis,
+  keine Prüfung seiner heutigen Erreichbarkeit.
 - Ein separat reproduzierter Serving-Fehler und ein unzuverlässiger
   Smoke-Test werden korrigiert. Beide sind **keine nachgewiesenen Ursachen
   der acht fehlgeschlagenen Builds**.
@@ -150,6 +155,10 @@ Der GitHub-Workflow prüft PRs und `main` unter exakt 22.12.0 sowie aktuellen
 Node-22-/24-Versionen. Er installiert aus dem Lockfile, baut, prüft den
 Graphen und den Produktionsserver. Er enthält keine Deployment-Aktion.
 
+Der erste [GitHub-CI-Lauf](https://github.com/ralfarminkirchner-netizen/phaenomenautik-3/actions/runs/38041843115)
+für den Korrekturcommit `b4527c9` ist in allen drei Matrix-Jobs erfolgreich:
+Clean Install, Produktionsbuild, Graph-QA und HTTP-Servertests jeweils grün.
+
 Der reparierte `qa/smoke-railway.cjs` akzeptiert `QA_URL` zur Auswahl eines
 bereits bereitgestellten Diensts. Fehlender Titel, fehlendes `window.__game`,
 Browserfehler und Ausnahmen führen nun zu Exitcode 1. Das beseitigt den
@@ -177,6 +186,15 @@ und passenden MIME-Typen ausgeliefert. Ihre Bytes stimmen mit dem lokalen
 Build des Ausgangscommits überein. Das bestätigt die Auslieferung dieses
 Stands, keinen vollständigen Spieldurchlauf und keine Bereitstellung dieses PR.
 
+Eine separate Prüfung derselben öffentlichen URL im Cloud-Browser erreicht
+den Titelscreen, `Neue Reise` und die vollständige klickbare Einführung.
+Danach bleibt die sichtbare Seite bei „Die See wird bereitet …“. Es wird
+keine Fehlerseite angezeigt, aber eine 3D-Welt konnte in diesem Test nicht
+bestätigt werden. Segeln, Interaktionen, Journal und weitere Spielabläufe
+sind damit nicht verifiziert. Die Ursache des Ladezustands ist ohne
+weitere Browser-/WebGL-Diagnostik offen; er darf weder als erfolgreicher
+Spielstart noch als bewiesene Buildursache dargestellt werden.
+
 ## Noch benötigte Railway-Evidenz
 
 Alle acht Fehlbenachrichtigungen wurden gelesen. Sie betreffen das Projekt
@@ -184,16 +202,33 @@ Alle acht Fehlbenachrichtigungen wurden gelesen. Sie betreffen das Projekt
 `3143e3e3-46c2-491a-b43e-0ba062cd008a`. Zeiten sind Mailzeitpunkte in MESZ,
 keine bewiesenen Build-Startzeitpunkte.
 
-| 09.10.2026 MESZ | Dienst | Fehlgeschlagenes Deployment |
-| --- | --- | --- |
-| 08:27:50 | `phaenomenautik-3` | `c1ee52df-6061-4754-8fde-8c0a6f12b361` |
-| 09:27:37 | `phaenomenautik-3` | `b5d1c6ed-19d0-4e96-8046-8fd3900bab84` |
-| 09:55:38 | `phaenomenautik-3` | `4f568603-0a98-4913-b3fd-8dbe3701c647` |
-| 10:23:35 | `phaenomenautik-3` | `b82a7697-c97e-424e-b25a-dd4dd2ae4178` |
-| 11:05:18 | `phaenomenautik-3-live` | `e9eea9f9-603e-470d-894f-081d05c1eeec` |
-| 11:32:39 | `phaenomenautik-3-live` | `bc0a2b71-634b-442f-bcfd-6c0e0e671ce8` |
-| 12:20:37 | `phaenomenautik-3-live` | `63716702-d92e-4d16-950f-4d42f2e1723b` |
-| 12:53:01 | `phaenomenautik-3` | `23b60099-de84-4662-b669-54dced1d8aec` |
+| 09.10.2026 MESZ | Dienst | Fehlgeschlagenes Deployment | Git-Commit laut GitHub-Status |
+| --- | --- | --- | --- |
+| 08:27:50 | `phaenomenautik-3` | `c1ee52df-6061-4754-8fde-8c0a6f12b361` | Offen |
+| 09:27:37 | `phaenomenautik-3` | `b5d1c6ed-19d0-4e96-8046-8fd3900bab84` | Offen |
+| 09:55:38 | `phaenomenautik-3` | `4f568603-0a98-4913-b3fd-8dbe3701c647` | Offen |
+| 10:23:35 | `phaenomenautik-3` | `b82a7697-c97e-424e-b25a-dd4dd2ae4178` | Offen |
+| 11:05:18 | `phaenomenautik-3-live` | `e9eea9f9-603e-470d-894f-081d05c1eeec` | `2acdec9` |
+| 11:32:39 | `phaenomenautik-3-live` | `bc0a2b71-634b-442f-bcfd-6c0e0e671ce8` | `6323180` |
+| 12:20:37 | `phaenomenautik-3-live` | `63716702-d92e-4d16-950f-4d42f2e1723b` | `82f6124` |
+| 12:53:01 | `phaenomenautik-3` | `23b60099-de84-4662-b669-54dced1d8aec` | Offen |
+
+Die [Statuses von `2acdec9`](https://api.github.com/repos/ralfarminkirchner-netizen/phaenomenautik-3/commits/2acdec938d9c20edc9a2361cd940a92181e1687b/statuses),
+[`6323180`](https://api.github.com/repos/ralfarminkirchner-netizen/phaenomenautik-3/commits/63231804c5f52a11649c8ab698172784d1b0d898/statuses)
+und [`82f6124`](https://api.github.com/repos/ralfarminkirchner-netizen/phaenomenautik-3/commits/82f6124572a88783e8dec49174ecc63dfa4d4c40/statuses)
+nennen dieselben Deployment-IDs wie die drei Live-Mails und jeweils
+`failure`. Die Quellenstände enthalten die oben reproduzierten Syntax-
+bzw. TypeScript-Blocker; welcher Fehler im Railway-Lauf zuerst auftrat,
+beweisen erst die Buildlogs.
+
+Der [Status von `f16a827`](https://api.github.com/repos/ralfarminkirchner-netizen/phaenomenautik-3/commits/f16a827c5c139dc8a9f585fb86d392bc7b449361/statuses)
+meldet für den ursprünglichen Live-Service
+`56703f80-195f-46e7-a64b-7a1437e1b373` am 09.10. um 12:26:59 MESZ
+`success`, Deployment `21aeaec1-463f-4ec0-a611-14760193f368`.
+Eine Live-Domain enthält dieser Status nicht. Für die ursprüngliche
+Haupt-Service-ID `3522770b-3f7b-43bc-a81e-95c9ef15461f` wurde in den
+Commitstatuses dieser Repository-Historie vom 8.–10. Oktober kein Treffer
+gefunden; ihre fünf Deployment-Commits bleiben offen.
 
 Die Mails enthalten keine Compiler-, Installations- oder Ressourcenfehler.
 Der exakte jüngste Dashboardlink zeigte Login und eine 404-Seite; die
@@ -204,8 +239,9 @@ sind offen. Private Mail-IDs und Mailinhalte werden nicht in diesem
 öffentlichen Repository abgelegt.
 
 Commitstatus und HTTP-Prüfung ersetzen keine zugriffsgeschützten Logs
-und Serviceeinstellungen. Die Zuordnung der acht Deployments zu ihren
-Git-Commits ist ohne passende zusätzliche Statusnachweise ebenfalls offen.
+und Serviceeinstellungen. Drei Deployment-Commits sind damit zugeordnet,
+fünf bleiben offen. Es ist nicht bewiesen, dass beide ursprünglichen
+Dienste denselben Commit oder dieselben Buildbedingungen verwendeten.
 
 Für beide Dienste sind insbesondere zu vergleichen:
 
