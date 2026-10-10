@@ -1,7 +1,7 @@
 # Weiterarbeit — gemeinsame Übergabe (Mac Mini ↔ iMac)
 
 Zuletzt aktualisiert: 10. Oktober 2026, Kimi (Mac Mini).
-Zuletzt tatsächlich gepushter Stand: Branch `kimi/open-world-20261010`, Commits `4d3e148` (M5-Übernahme) + `78e97b3` (Atlas-Doku) auf `origin`.
+Zuletzt tatsächlich gepushter Stand: Branch `kimi/open-world-20261010`, Commit `073469e` (Qualitätsleiter-Fix) auf `origin`.
 
 ## Arbeitskopien und Branches
 
@@ -35,17 +35,21 @@ node_modules/.bin/esbuild qa/open-world.test.ts qa/ship-fields.test.ts \
 node --test .qa-build/open-world.test.js .qa-build/ship-fields.test.js
 ```
 
-Zuletzt gemessen: tsc grün, Build grün (bekannte Bundle-Warnung), 12/12 + 7/7 Tests.
-Browser (eingebettete Ansicht, Regen-Szene, 422×901): 49,4 FPS mittel, 95.-Perzentil 27,2 ms, Qualitätsstufe 0. **60 FPS ist weiterhin offen** — Messung auf benannten Geräten und Qualitätsstufen fehlt noch.
+## Leistung (gemessen 10.10., Mac Mini M4, 16 GB, Produktionsbuild, eingebettete Ansicht 688×1091 @ 1,6)
+
+- Volle Qualität (Stufe 0): **60 FPS** an Hafen, Flimmerbucht, offener See, Regen — bei ruhiger Maschine.
+- Unter gleichzeitiger Last (parallele Builds/Tests einer zweiten Sitzung): 38–48 FPS.
+- **Befund und Fix (`073469e`)**: die Qualitätsleiter stieg nie ab, weil die fpsEma sich bei 44,7–48 knapp über dem alten Schwellwert 44 einpendelte. Neu: Stufe sinkt unter 52 FPS, steigt erst über 58,5 (Hysterese). Reaktion synthetisch geprüft (Stufen 1→2→3 unter anhaltender Last), 19/19 Regressionstests grün.
+- Die eingebaute „Technische Messung“ in der Ortsleiste liefert weiterhin ehrliche Momentaufnahmen je Browseransicht.
+- Offen: Messung im Vollbild/größeren Fenstern und auf dem iMac; weitere optische Kosten (Reflexions-Kadenz, Bloom) nur bei erneutem Befund senken — Physik und Zugänge bleiben konsistent.
 
 ## Offene Aufgaben (aus Issue #2)
 
-1. **Leistung**: 60 FPS auf benannten Geräten messen; bei Überlast zuerst optische Kosten (Qualitätsleiter greift bereits).
-2. **Strömungsinsel/Resonanzhafen**: vierte/fünfte Region über dieselben Regeln anschließen (Drift, Klangkörper, Verständigung bei Wind).
-3. **Atlas-Brücke erweitern**: bisher nur `flimmerbucht-r1` geprüft; keine erfundenen Verträge, bestehende Schnittstellen im Atlas (`astra-neubau`) nutzen.
-4. **Freiwilliger Kompass** („Überrasche mich“, „Meiner Frage folgen“) — noch nicht begonnen.
-5. **Wetter/Tageszeit bewusst einstellbar** für Vergleiche (Funktionen `setWorldWeather`/`setWorldTime` existieren, UI teilweise).
-6. Gesamt-Lint nicht grün (Altbestand, 15 Fehler) — nur bei Bedarf angehen.
+1. **Strömungsinsel/Resonanzhafen**: vierte/fünfte Region über dieselben Regeln anschließen (Drift, Klangkörper, Verständigung bei Wind).
+2. **Atlas-Brücke erweitern**: bisher nur `flimmerbucht-r1` geprüft; keine erfundenen Verträge, bestehende Schnittstellen im Atlas (`astra-neubau`) nutzen.
+3. **Freiwilliger Kompass** („Überrasche mich“, „Meiner Frage folgen“) — noch nicht begonnen.
+4. **Wetter/Tageszeit bewusst einstellbar** für Vergleiche (Funktionen `setWorldWeather`/`setWorldTime` existieren, UI teilweise).
+5. Gesamt-Lint nicht grün (Altbestand, 15 Fehler) — nur bei Bedarf angehen.
 
 ## Lokale Konfiguration (ohne Geheimnisse)
 
