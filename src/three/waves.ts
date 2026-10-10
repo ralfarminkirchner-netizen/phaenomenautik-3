@@ -25,7 +25,8 @@ export function waveHeight(x: number, z: number, t: number, stormAmp: number): n
   let y = 0;
   for (const w of WAVES) {
     const k = TWO_PI / w.wavelength;
-    const f = k * (w.dirX * x + w.dirZ * z) - t * w.speed * k * Math.sqrt(9.81 / k) * 1.6;
+    const length = Math.hypot(w.dirX, w.dirZ);
+    const f = k * ((w.dirX * x + w.dirZ * z) / length) - t * w.speed * k * Math.sqrt(9.81 / k) * 1.6;
     y += w.amplitude * stormAmp * Math.sin(f);
   }
   return y;

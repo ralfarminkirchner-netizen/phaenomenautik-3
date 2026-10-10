@@ -396,6 +396,7 @@ export class Props {
       setShadows(model, true, false);
       g.add(model);
       const light = new THREE.PointLight(0xff8a3c, 0, 26, 1.7);
+      light.visible = false;
       light.position.y = 1.6;
       g.add(light);
       g.position.set(x, y, z);
@@ -504,6 +505,7 @@ export class Props {
     for (const f of this.fires) {
       if (!f.lit) {
         f.light.intensity = 0;
+        f.light.visible = false;
         continue;
       }
       const dx = f.x - camPos.x;
@@ -511,9 +513,11 @@ export class Props {
       const near = dx * dx + dz * dz < 300 * 300;
       if (!near) {
         f.light.intensity = 0;
+        f.light.visible = false;
         continue;
       }
       f.light.intensity = 24 + Math.sin(t * 2.9 + f.x) * 2.5 + Math.sin(t * 5.3 + 1.7) * 1.8;
+      f.light.visible = true;
       if (Math.random() < 0.55) {
         particles.spawn({
           x: f.x + (Math.random() - 0.5) * 0.7, y: f.y + 0.5, z: f.z + (Math.random() - 0.5) * 0.7,
