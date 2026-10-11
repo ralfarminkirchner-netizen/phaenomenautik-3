@@ -63,17 +63,17 @@ function v(
 
 const HUE_OFFSETS = [-32, 24, 52];
 const SIZES = [1.1, 0.8, 1.3];
+const nodeMaskCounter: Record<string, number> = {};
 
 function m(id: string, nodeId: string, maskName: string, epithet: string, line: string, truth: string): VariantDef {
   const node = NODE_BY_ID.get(nodeId);
   if (!node) throw new Error(`Maske ohne gültigen Kern-Knoten: ${id} -> ${nodeId}`);
-  const idx = m.counters[nodeId] = (m.counters[nodeId] ?? 0) + 1;
+  const idx = (nodeMaskCounter[nodeId] = (nodeMaskCounter[nodeId] ?? 0) + 1);
   const hue = (((node.hue + HUE_OFFSETS[idx % 3]) % 360) + 360) % 360;
   const sizeScale = SIZES[idx % 3];
   const begreifen = `Das war ${coreShortName(nodeId)} — in einer anderen Maske. ${truth}`;
   return { id, nodeId, maskName, epithet, hue, sizeScale, spawnRules: { drift: true }, line, begreifen };
 }
-m.counters = {} as Record<string, number>;
 
 // ─── Die ersten 12 Masken — redaktioneller Qualitätsmaßstab ────────
 // Vier Knoten (die Hauptstädte der ersten Stunde), je drei Masken.
