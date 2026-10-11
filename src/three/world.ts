@@ -1333,7 +1333,7 @@ export class GameWorld {
   }
 
   /** QA-Hook (M4.2): aktive Masken in Render-Nähe */
-  get variantList(): { variantId: string; maskName: string; nodeId: string; islandId: string; x: number; z: number; drifted: boolean }[] {
+  get variantList(): { variantId: string; maskName: string; nodeId: string; islandId: string | null; x: number; z: number; drifted: boolean }[] {
     return this.wisps.variantList();
   }
 
