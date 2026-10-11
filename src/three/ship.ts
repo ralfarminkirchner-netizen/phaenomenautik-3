@@ -24,8 +24,7 @@ export class Ship {
   private hullRoll = 0;
   private wake: THREE.Mesh;
   private wakeMat: THREE.ShaderMaterial;
-  private shadowBlob: THREE.Mesh;
-  private shadowMat: THREE.MeshBasicMaterial;
+  private shadowBlob: THREE.Mesh | null = null;
   moored = false;
   private sailNodes: THREE.Object3D[] = [];
   private sailAmount = 1;
@@ -85,24 +84,27 @@ export class Ship {
     // Weicher Schatten auf dem Wasser: die Wasserfläche ist ein eigener
     // Shader ohne Schattenempfang — ein wellenfolgender Dunkelkörper gibt
     // dem Rumpf sichtbaren Kontakt mit der See (kostet fast nichts).
-    const blobCanvas = document.createElement("canvas");
-    blobCanvas.width = blobCanvas.height = 128;
-    const bctx = blobCanvas.getContext("2d")!;
-    const grad = bctx.createRadialGradient(64, 64, 6, 64, 64, 62);
-    grad.addColorStop(0, "rgba(6, 18, 26, 0.62)");
-    grad.addColorStop(0.55, "rgba(6, 18, 26, 0.30)");
-    grad.addColorStop(1, "rgba(6, 18, 26, 0)");
-    bctx.fillStyle = grad;
-    bctx.fillRect(0, 0, 128, 128);
-    const blobTex = new THREE.CanvasTexture(blobCanvas);
-    this.shadowMat = new THREE.MeshBasicMaterial({
-      map: blobTex, transparent: true, depthWrite: false, opacity: 0.9,
-    });
-    const blobGeo = new THREE.PlaneGeometry(11, 19);
-    blobGeo.rotateX(-Math.PI / 2);
-    this.shadowBlob = new THREE.Mesh(blobGeo, this.shadowMat);
-    this.shadowBlob.renderOrder = 3; // nach dem (transparenten) Wasser zeichnen
-    scene.add(this.shadowBlob);
+    // Nur im Browser aufbauen: ship-fields.test.ts baut das Schiff in Node.
+    if (typeof document !== "undefined") {
+      const blobCanvas = document.createElement("canvas");
+      blobCanvas.width = blobCanvas.height = 128;
+      const bctx = blobCanvas.getContext("2d")!;
+      const grad = bctx.createRadialGradient(64, 64, 6, 64, 64, 62);
+      grad.addColorStop(0, "rgba(6, 18, 26, 0.62)");
+      grad.addColorStop(0.55, "rgba(6, 18, 26, 0.30)");
+      grad.addColorStop(1, "rgba(6, 18, 26, 0)");
+      bctx.fillStyle = grad;
+      bctx.fillRect(0, 0, 128, 128);
+      const blobTex = new THREE.CanvasTexture(blobCanvas);
+      const shadowMat = new THREE.MeshBasicMaterial({
+        map: blobTex, transparent: true, depthWrite: false, opacity: 0.9,
+      });
+      const blobGeo = new THREE.PlaneGeometry(11, 19);
+      blobGeo.rotateX(-Math.PI / 2);
+      this.shadowBlob = new THREE.Mesh(blobGeo, shadowMat);
+      this.shadowBlob.renderOrder = 3; // nach dem (transparenten) Wasser zeichnen
+      scene.add(this.shadowBlob);
+    }
   }
 
   sailDt(
@@ -190,10 +192,12 @@ export class Ship {
 
     // Schatten folgt dem Rumpf auf mittlerer Wellenhöhe, leicht zum Bug
     // versetzt; bei starker See flackert er nicht, weil er die Welle nutzt.
-    const sx = this.x - Math.sin(this.heading) * 1.2;
-    const sz = this.z - Math.cos(this.heading) * 1.2;
-    this.shadowBlob.position.set(sx, waveY(sx, sz) + 0.09, sz);
-    this.shadowBlob.rotation.set(0, this.heading, 0);
+    if (this.shadowBlob) {
+      const sx = this.x - Math.sin(this.heading) * 1.2;
+      const sz = this.z - Math.cos(this.heading) * 1.2;
+      this.shadowBlob.position.set(sx, waveY(sx, sz) + 0.09, sz);
+      this.shadowBlob.rotation.set(0, this.heading, 0);
+    }
     if (strength > 0.45 && Math.random() < strength * 0.6) {
       particles.spawn({
         x: this.x - Math.sin(this.heading) * 8.5 + (Math.random() - 0.5) * 2.4,
@@ -213,7 +217,7 @@ export class Ship {
     this.speed = 0;
     this.group.position.set(x, 0.3, z);
     this.group.rotation.set(0, heading, 0);
-    this.shadowBlob.position.set(x - Math.sin(heading) * 1.2, 0.12, z - Math.cos(heading) * 1.2);
-    this.shadowBlob.rotation.set(0, heading, 0);
+    this.shadowBlob?.position.set(x - Math.sin(heading) * 1.2, 0.12, z - Math.cos(heading) * 1.2);
+    if (this.shadowBlob) this.shadowBlob.rotation.set(0, heading, 0);
   }
 }
