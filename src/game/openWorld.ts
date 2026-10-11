@@ -1,3 +1,5 @@
+import { ensureNpcMemory } from "./npcMemory";
+
 // One persisted world clock. The rooms are places in that world, not chapters.
 export type RoomId = "bay" | "harbor" | "shelter";
 export const ROOMS: { id: RoomId; name: string; x: number; z: number; arrivalX: number; arrivalZ: number; reason: string }[] = [
@@ -123,26 +125,26 @@ function witness(knowledge: KnowledgeEntry[], s: OpenWorldState, source: Knowled
 }
 /** Eine gespeicherte Kenntnis als erinnerbare Zeile: Art, Quelle, Weltzeit und Ort bleiben getrennt erhalten. */
 export function knowledgeLine(e: KnowledgeEntry): string {
-  const kind = e.kind === "message" ? "Erzählt" : e.kind === "delivery" ? "Übergabe" : e.kind === "retraction" ? "Rücknahme" : "Beobachtet";
+  const kind = e.kind === "message" ? "Erzählt" : e.kind === "delivery" ? "Übergabe" : e.kind === "retraction" ? "Rücknahme" : e.kind === "observation" ? "Beobachtet" : "Erinnert";
   const h = Math.floor(e.at / 3600), rest = e.at % 3600;
   const stamp = `${h}:${Math.floor(rest / 60).toString().padStart(2, "0")}:${Math.floor(rest % 60).toString().padStart(2, "0")} h`;
-  const place = e.room ? roomById(e.room).name : "am Ort";
+  const place = e.room ? roomById(e.room).name : "Ort nicht überliefert";
   return `${kind} (${e.source === "heard" ? "gehört" : "gesehen"}, Weltzeit ${stamp}, ${place}): „${e.fact}“`;
 }
 // Empfängerwissen und vorhandene NPC-Erinnerung sind dasselbe Gedächtnis:
 // Mara und Tove tragen im NPC-Katalog die IDs „mara“/„tove“. Ohne Eintrag im
 // Hafenwissen bleibt die jeweilige Person außerhalb — Nichtwissen wird nicht
 // eingetragen, sondern einfach nicht gespeichert.
-export function syncNpcMemory(save: { npcMemory: Record<string, { met: boolean; topics: string[]; favors: number }> }, s: OpenWorldState): void {
+export function syncNpcMemory(save: { npcMemory?: unknown }, s: OpenWorldState): void {
+  const memory = ensureNpcMemory(save);
   for (const person of ["Mara", "Tove"] as const) {
     const entries = s.harbor.knowledge[person];
     if (!entries.length) continue;
     const id = person.toLowerCase();
-    const mem = save.npcMemory[id] ?? { met: false, topics: [], favors: 0 };
+    const mem = memory[id] ?? { met: false, topics: [], favors: 0 };
     mem.met = true;
     for (const entry of entries) if (!mem.topics.includes(entry.fact)) mem.topics.push(entry.fact);
-    if (mem.topics.length > 12) mem.topics.splice(0, mem.topics.length - 12);
-    save.npcMemory[id] = mem;
+    memory[id] = mem;
   }
 }
 function weatherName(s: OpenWorldState): string { return s.weather === "rain" ? "Regen" : s.weather === "breeze" ? "auffrischender Wind" : "ruhiges Wetter"; }

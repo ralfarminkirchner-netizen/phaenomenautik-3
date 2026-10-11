@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { ROOMS, createOpenWorld, ensureOpenWorld, stepOpenWorld, sampleFields, bayOptics, applyWorldAction, availableActions, addObservation, reviseObservation, isOpenWorldState, setWorldTime, setWorldWeather, syncNpcMemory, knowledgeLine, type RoomId } from "../src/game/openWorld.ts";
 import { createFixedStepper } from "../src/game/fixedStep.ts";
 import { newGame, loadSave, persistSave, parseImportedSave } from "../src/game/state.ts";
+import { npcReply } from "../src/game/dialogAI.ts";
+import { NPCS } from "../src/game/npc.ts";
 
 const SAVE_KEY = "phaenomenautik3-save-v1";
 const data = new Map<string, string>();
@@ -331,4 +333,92 @@ test("harbor knowledge becomes the existing NPC memory: mara remembers, tove sta
   syncNpcMemory(saveRaw, saveRaw.openWorld);
   assert.equal(saveRaw.npcMemory.mara.topics.length, 2);
   assert.equal(saveRaw.npcMemory.tove, undefined);
+});
+
+test("accepted legacy imports normalize NPC memory without losing valid topics or facts", () => {
+  data.clear(); loadSave();
+  const world = createOpenWorld();
+  applyWorldAction(world, "harbor", "task-repair");
+  applyWorldAction(world, "harbor", "tell-Mara");
+  const priorTopics = ["flashback", ...Array.from({ length: 14 }, (_, i) => `earlier-topic-${i}`)];
+  const cases: unknown[] = [undefined, null, 7, [],
+    { mara: { met: true, topics: false, favors: null } },
+    { mara: { met: true, topics: "Früher gehörte Aussage", favors: 3 } },
+    { mara: { met: true, topics: [...priorTopics, null, 7], favors: 4 }, kaj: { met: true, topics: ["schiff"], favors: 2 } },
+  ];
+  for (const memory of cases) {
+    const raw = { ...newGame(), openWorld: world, npcMemory: memory };
+    const imported = parseImportedSave(JSON.stringify(raw));
+    assert.ok(imported.npcMemory && !Array.isArray(imported.npcMemory));
+    syncNpcMemory(imported, imported.openWorld!);
+    assert.equal(imported.npcMemory.mara.met, true);
+    assert.ok(imported.npcMemory.mara.topics.some(topic => /Ausbesserung des Stegs/.test(topic)));
+    assert.equal(imported.npcMemory.tove, undefined);
+    assert.ok(imported.npcMemory.mara.topics.every(topic => typeof topic === "string"));
+    if (typeof memory === "object" && memory !== null && "kaj" in memory) {
+      assert.deepEqual(imported.npcMemory.mara.topics.slice(0, priorTopics.length), priorTopics);
+      assert.equal(imported.npcMemory.mara.favors, 4);
+      assert.deepEqual(imported.npcMemory.kaj, { met: true, topics: ["schiff"], favors: 2 });
+    }
+    if (typeof memory === "object" && memory !== null && "mara" in memory &&
+        typeof (memory as { mara: { topics: unknown } }).mara.topics === "string") {
+      assert.ok(imported.npcMemory.mara.topics.includes("Früher gehörte Aussage"));
+      assert.equal(imported.npcMemory.mara.favors, 3);
+    }
+  }
+  // Sync is also safe before a legacy object has passed through prepareSave.
+  const unprepared = { npcMemory: { mara: { topics: false } } };
+  assert.doesNotThrow(() => syncNpcMemory(unprepared, world));
+  data.clear(); loadSave();
+});
+
+test("normal NPC dialogue recalls only witnessed harbor events across save/load and export/import", () => {
+  data.clear(); loadSave();
+  const save = newGame();
+  const world = ensureOpenWorld(save);
+  stepOpenWorld(world, 300);
+  applyWorldAction(world, "harbor", "task-repair");
+  applyWorldAction(world, "harbor", "choose-Mara");
+  applyWorldAction(world, "harbor", "tell-Mara");
+  stepOpenWorld(world, 45);
+  applyWorldAction(world, "harbor", "deliver");
+  stepOpenWorld(world, 45);
+  applyWorldAction(world, "harbor", "undo-delivery");
+  // Selecting a recipient conveys neither a message nor a delivery.
+  applyWorldAction(world, "harbor", "choose-Tove");
+  save.npcMemory.mara = { met: true, topics: ["flashback"], favors: 2 };
+  syncNpcMemory(save, world);
+  const mara = NPCS.find(npc => npc.id === "mara")!;
+  const tove = NPCS.find(npc => npc.id === "tove")!;
+  const question = "Was weißt du über meine Materialübergabe im Hafen?";
+  const remembered = npcReply(mara, question, save, 0).text;
+  assert.match(remembered, /Erzählt \(gehört, Weltzeit 0:05:00 h, Werkhafen\)/);
+  assert.match(remembered, /Übergabe \(gesehen, Weltzeit 0:05:45 h, Werkhafen\)/);
+  assert.match(remembered, /Rücknahme \(gesehen, Weltzeit 0:06:30 h, Werkhafen\)/);
+  assert.ok(remembered.indexOf("Erzählt (") < remembered.indexOf("Übergabe ("));
+  assert.ok(remembered.indexOf("Übergabe (") < remembered.indexOf("Rücknahme ("));
+  const beforeQuestion = JSON.stringify(save);
+  assert.match(npcReply(tove, question, save, 0).text, /nichts gehört oder gesehen/);
+  assert.equal(JSON.stringify(save), beforeQuestion, "Nichtwissen wird nicht als Fakt gespeichert");
+  assert.equal(save.npcMemory.tove, undefined);
+  assert.equal(persistSave(save), true);
+  const reloaded = loadSave()!;
+  assert.equal(npcReply(mara, question, reloaded, 8).text, remembered);
+  // This is the same JSON serialization used by the existing save export.
+  const exported = JSON.stringify(reloaded, null, 2);
+  const imported = parseImportedSave(exported);
+  assert.equal(persistSave(imported), true);
+  const reopened = loadSave()!;
+  assert.equal(npcReply(mara, question, reopened, 12).text, remembered);
+  assert.match(npcReply(tove, question, reopened, 12).text, /nichts gehört oder gesehen/);
+  assert.deepEqual(reopened.openWorld!.harbor.knowledge, world.harbor.knowledge);
+  assert.deepEqual(reopened.openWorld!.harbor.inventory, world.harbor.inventory);
+  assert.ok(reopened.npcMemory.mara.topics.includes("flashback"));
+  assert.equal(reopened.npcMemory.mara.favors, 2);
+  data.clear(); loadSave();
+});
+
+test("legacy harbor facts do not gain an invented event kind or place", () => {
+  assert.match(knowledgeLine({ at: 60, source: "heard", fact: "Alte Aussage" }),
+    /^Erinnert \(gehört, Weltzeit 0:01:00 h, Ort nicht überliefert\)/);
 });

@@ -7,6 +7,8 @@ import { PHENOMENA } from "./data";
 import type { NpcDef, NpcDomain } from "./npc";
 import type { SaveGame } from "./state";
 import { activeQuests, completableQuests, offerableQuests, QUESTS } from "./quests";
+import { knowledgeLine } from "./openWorld";
+import { ensureNpcMemory } from "./npcMemory";
 
 export interface DialogReply {
   text: string;
@@ -160,7 +162,7 @@ const pick = <T,>(arr: T[], seed: number): T => arr[Math.abs(seed) % arr.length]
 export function npcReply(npc: NpcDef, rawInput: string, save: SaveGame, turnCount: number): DialogReply {
   const input = norm(rawInput);
   const name = save.playerName || "Seefahrer";
-  const mem = save.npcMemory[npc.id];
+  const mem = ensureNpcMemory(save)[npc.id];
 
   // 0) Name vergeben
   const nameMatch = rawInput.match(/ich hei(?:ß|ss)e\s+([A-ZÄÖÜ][\p{L}]+)/u);
@@ -175,6 +177,20 @@ export function npcReply(npc: NpcDef, rawInput: string, save: SaveGame, turnCoun
   if (/(umbringen|suizid|selbstmord|nicht mehr leben|will sterben|sterben will|mich toten|selbstverletz|ritzen|kein ausweg mehr)/.test(input)) {
     return {
       text: "Falls diese Worte deine aktuelle Situation beschreiben: Bei unmittelbarer Gefahr rufe in Deutschland 112. TelefonSeelsorge erreichst du unter 116 123, 0800 111 0 111 oder 0800 111 0 222, kostenfrei und rund um die Uhr. Bei dringenden medizinischen Anliegen außerhalb der Sprechzeiten: 116 117. Dieser vorgefertigte Spieldialog kann deine Lage nicht einschätzen. Du kannst das Spiel unterbrechen und Kontakt zu einem selbst gewählten Menschen suchen.",
+    };
+  }
+
+  // Hafenfolgen kommen aus dem vorhandenen Empfängerwissen, nicht aus Absicht
+  // oder dem Wissen der anderen Person. Eine Nachfrage erzeugt keinen Fakt.
+  if ((npc.id === "mara" || npc.id === "tove") &&
+      /hafen|steg|material|ubergabe|zuruckgenommen|rucknahme|erinner|was (habe ich|hast du).*erzahlt|was (weist|weisst) du|meine absicht/.test(input)) {
+    const person = npc.id === "mara" ? "Mara" : "Tove";
+    const entries = save.openWorld?.harbor.knowledge[person] ?? [];
+    if (!entries.length) {
+      return { text: `${person}: „Von deinen Absichten oder Materialübergaben im Werkhafen habe ich nichts gehört oder gesehen. Was du anderen erzählt oder gezeigt hast, weiß ich nicht.“` };
+    }
+    return {
+      text: `${person} erinnert sich an die folgende Hafenfolge:\n${entries.map(knowledgeLine).join("\n")}\nWas außerhalb dieser Begegnungen geschah, weiß ${person} nicht. Eine erzählte Absicht ist noch keine ausgeführte Übergabe.`,
     };
   }
 
