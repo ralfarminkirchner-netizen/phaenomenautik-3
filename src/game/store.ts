@@ -28,6 +28,7 @@ export interface HudState {
   dialogNpc: string | null;
   battlePhen: string | null;
   encounterId: string | null; // aktive Strand-Begegnung (M4)
+  variantId: string | null; // aktive Masken-Begegnung (M4.2)
   journalOpen: boolean;
   loreStone: string | null; // Id des offenen Lore-Steins
   chatOpen: boolean;
@@ -67,6 +68,7 @@ export const initialHud: HudState = {
   dialogNpc: null,
   battlePhen: null,
   encounterId: null,
+  variantId: null,
   journalOpen: false,
   loreStone: null,
   chatOpen: false,

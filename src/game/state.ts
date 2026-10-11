@@ -79,6 +79,9 @@ export interface SaveGame {
   compassEntries: string[]; // erkannte Manipulations-Taktiken (Manipulations-Kompass)
   // Phänomen-Netz (M4)
   graph: GraphProgress; // Nebel-of-War: verstandene / begegnete Knoten, befahrene Kanten
+  // Varianten-Motor (M4.2): Masken — gefunden / begriffen
+  variantsUnderstood: string[];
+  variantsMet: string[];
 }
 
 const SAVE_KEY = "phaenomenautik3-save-v1";
@@ -141,6 +144,8 @@ export function newGame(): SaveGame {
     duelsDone: [],
     compassEntries: [],
     graph: emptyGraphProgress(),
+    variantsUnderstood: [],
+    variantsMet: [],
   };
 }
 
@@ -216,6 +221,8 @@ export function loadSave(): SaveGame | null {
     s.duelsDone ??= [];
     s.compassEntries ??= [];
     s.graph ??= graphProgressFromIslands(s.islands); // M4: alter Insel-Fortschritt wird ins Netz übernommen
+    s.variantsUnderstood ??= []; // M4.2: Masken-Register
+    s.variantsMet ??= [];
     return s;
   } catch {
     return null;

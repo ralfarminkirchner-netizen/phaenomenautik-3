@@ -13,8 +13,10 @@ import { RECIPES, INGREDIENTS, GF_DISCLAIMER } from "../game/cooking";
 import { TACTICS } from "../game/duels";
 import { saveGfMode } from "../game/state";
 import { BodyMap } from "./BodyMap";
+import { CLUSTER_BY_ID, NODE_BY_ID } from "../game/phenomenaGraph";
+import { VARIANTS, variantClusterStats, variantState } from "../game/variants";
 
-type JournalTab = "atlas" | "koerper" | "rezepte" | "kompass";
+type JournalTab = "atlas" | "register" | "koerper" | "rezepte" | "kompass";
 
 export function JournalOverlay() {
   const [open, setOpen] = useState(store.get().journalOpen);
@@ -31,9 +33,13 @@ export function JournalOverlay() {
   const remaining = PHENOMENA.filter((p) => !p.final && !save.islands.find((i) => i.id === p.id)?.overcome).length;
   const foundRecipes = RECIPES.filter((r) => save.recipesFound.includes(r.id));
   const foodStock = Object.entries(save.food).filter(([, n]) => n > 0);
+  // Atlas-Register (M4.2): Masken pro Kontinent & Knoten
+  const vStats = variantClusterStats(save.graph, save);
+  const maskNodeIds = [...new Set(VARIANTS.map((x) => x.nodeId))];
 
   const TABS: { id: JournalTab; label: string }[] = [
     { id: "atlas", label: "🗺 Atlas" },
+    { id: "register", label: "📓 Register" },
     { id: "koerper", label: "🧍 Körper" },
     { id: "rezepte", label: "🍲 Rezepte" },
     { id: "kompass", label: "🧭 Kompass" },
@@ -63,6 +69,96 @@ export function JournalOverlay() {
           ))}
         </div>
         <div className="overflow-y-auto px-5 py-4 space-y-6 text-sm bg-[#16233a]">
+          {tab === "register" && (
+            <section>
+              <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-2">
+                Atlas-Register — Masken ({save.variantsUnderstood.length}/{VARIANTS.length} begriffen)
+              </h3>
+              <p className="text-white/50 italic mb-3">
+                Jede Maske trägt denselben Kern in anderem Gewand. Begreifen statt Fangen — was du verpasst, kommt
+                wieder: Die Masken schwirren, sie laufen dir nie davon.
+              </p>
+              {vStats.map((s) => {
+                const cluster = CLUSTER_BY_ID.get(s.clusterId);
+                return (
+                  <div key={s.clusterId} className="mb-2 rounded-lg bg-black/30 border border-white/10 px-3 py-2">
+                    <div className="text-[13px] text-white/85">
+                      <span className="font-semibold text-amber-100">{cluster?.epithet ?? s.clusterId}</span>
+                      <span className="ml-2 text-sky-300/70">
+                        {s.understood}/{s.total} begriffen
+                        {s.met > 0 && ` · ${s.met} gefunden`}
+                      </span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${(s.understood / s.total) * 100}%`, background: `hsl(${cluster?.hue ?? 200}, 70%, 60%)` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+              {maskNodeIds.map((nodeId) => {
+                const node = NODE_BY_ID.get(nodeId);
+                if (!node) return null;
+                const masks = VARIANTS.filter((x) => x.nodeId === nodeId);
+                const got = masks.filter((x) => variantState(x, save.graph, save) !== "unerkannt").length;
+                return (
+                  <div key={nodeId} className="mt-3">
+                    <div className="text-[13px] text-white/80 mb-1">
+                      <span style={{ color: `hsl(${node.hue}, 70%, 70%)` }} className="font-semibold">
+                        {node.name}
+                      </span>
+                      <span className="ml-2 text-white/40 text-xs">{got}/{masks.length} Masken erkannt</span>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {masks.map((x) => {
+                        const st = variantState(x, save.graph, save);
+                        return (
+                          <li
+                            key={x.id}
+                            className={`rounded-lg border px-3 py-2 ${
+                              st === "begriffen"
+                                ? "bg-black/30 border-amber-200/25"
+                                : st === "gefunden"
+                                  ? "bg-black/20 border-white/10"
+                                  : "bg-black/10 border-white/5"
+                            }`}
+                          >
+                            <div className="flex items-baseline justify-between">
+                              <span
+                                className={
+                                  st === "unerkannt"
+                                    ? "text-white/30 italic"
+                                    : st === "gefunden"
+                                      ? "text-white/60"
+                                      : "font-semibold"
+                                }
+                                style={st === "begriffen" ? { color: `hsl(${x.hue}, 70%, 72%)` } : undefined}
+                              >
+                                {st === "unerkannt" ? "Eine noch unerkannte Maske …" : x.maskName}
+                              </span>
+                              <span className="text-[10px] uppercase tracking-wider text-white/35">
+                                {st === "begriffen" ? "begriffen ✦" : st === "gefunden" ? "gefunden" : "unerkannt"}
+                              </span>
+                            </div>
+                            {st === "begriffen" && (
+                              <>
+                                <div className="text-white/75 text-xs leading-relaxed mt-1">{x.line}</div>
+                                <div className="text-amber-200/70 text-[11px] leading-relaxed mt-1 border-l-2 border-amber-200/30 pl-2">
+                                  {x.begreifen}
+                                </div>
+                              </>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                );
+              })}
+            </section>
+          )}
           {tab === "koerper" && (
             <section>
               <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-3">Körperkarte — was wirkt gerade?</h3>

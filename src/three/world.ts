@@ -28,6 +28,7 @@ import { computeDish, mealsToActive, mealBonus, pruneMeals, ingById, type DishRe
 import { shrinePoint } from "../game/worldLayout";
 import { PHENOMENA } from "../game/data";
 import { NODE_BY_ID, revealedByUnderstanding, fogStateOf } from "../game/phenomenaGraph";
+import { autoUnderstoodByNode, todaysVariants, VARIANT_BY_ID } from "../game/variants";
 import { audio } from "../game/audio";
 import { store } from "../game/store";
 import { preloadAll, extractMerged, getModel, setShadows } from "./assets";
@@ -37,6 +38,11 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 const DAY_LENGTH_S = 1080; // 18 Minuten = 1 Spieltag
+
+/** Echtes Kalenderdatum (UTC) — Basis der deterministischen Masken-Rotation (kein FOMO). */
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export class GameWorld {
   private renderer: THREE.WebGLRenderer;
@@ -83,7 +89,9 @@ export class GameWorld {
   private npcs!: Npcs;
   private loreStones!: LoreStones;
   private creatures = new Map<string, Creature>();
-  private wisps!: Wisps; // Strandläufer (M4)
+  private wisps!: Wisps; // Strandläufer (M4) & Masken (M4.2)
+  private gameDate = ""; // ISO-Datum der laufenden Tages-Rotation
+  private lastDateCheck = 0; // Throttle für den Tageswechsel-Check
   private echoOrb: THREE.Mesh | null = null;
   private loot!: Loot;
   private structures!: Structures;
@@ -165,6 +173,10 @@ export class GameWorld {
 
     // Strandläufer (M4): sechs Strand-Begegnungen auf Alarm-Atoll & Glaswelt
     this.wisps = new Wisps(this.scene, save.graph);
+
+    // Masken des Tages (M4.2): Tages-Rotation, deterministisch, kein FOMO
+    this.gameDate = todayIso();
+    this.wisps.spawnVariants(todaysVariants(this.gameDate, this.save.graph, this.save));
 
     // Sammelbare Materialien + gebaute Strukturen
     this.loot = new Loot(this.scene, save.lootTaken);
@@ -265,7 +277,7 @@ export class GameWorld {
 
   get uiLock(): boolean {
     const st = store.get();
-    return !!(st.menuOpen || st.dead || st.dialogNpc || st.battlePhen || st.encounterId || st.journalOpen || st.loreStone || st.chatOpen || st.cookOpen || st.duelId);
+    return !!(st.menuOpen || st.dead || st.dialogNpc || st.battlePhen || st.encounterId || st.variantId || st.journalOpen || st.loreStone || st.chatOpen || st.cookOpen || st.duelId);
   }
 
   // ── Eingaben ─────────────────────────────────────────────────────
@@ -299,8 +311,8 @@ export class GameWorld {
         store.set({ chatOpen: false });
       } else if (st.cookOpen) {
         store.set({ cookOpen: false });
-      } else if (st.journalOpen || st.dialogNpc || st.loreStone || st.encounterId) {
-        store.set({ journalOpen: false, dialogNpc: null, loreStone: null, encounterId: null });
+      } else if (st.journalOpen || st.dialogNpc || st.loreStone || st.encounterId || st.variantId) {
+        store.set({ journalOpen: false, dialogNpc: null, loreStone: null, encounterId: null, variantId: null });
       } else if (!st.battlePhen && !st.duelId) {
         store.set({ menuOpen: !st.menuOpen });
       }
@@ -469,14 +481,23 @@ export class GameWorld {
       return;
     }
 
-    // Strand-Begegnung (M4): kleine Phänomen-Gestalten am Strand
+    // Strand-Begegnung (M4) / Maske des Tages (M4.2): kleine Phänomen-Gestalten am Strand
     const wisp = this.wisps.nearest(p.x, p.z, 3.4);
     if (wisp) {
-      this.currentPrompt = {
-        key: "E",
-        text: `Strand-Begegnung: ${wisp.node.name} — ${wisp.node.epithet}`,
-        action: () => this.openEncounter(wisp.node.id),
-      };
+      if (wisp.kind === "variant") {
+        const x = wisp.spawn.variant;
+        this.currentPrompt = {
+          key: "E",
+          text: `Maske: ${x.maskName} — ${x.epithet}${wisp.spawn.drifted ? " · fern von zu Hause" : ""}`,
+          action: () => this.openVariantEncounter(x.id),
+        };
+      } else {
+        this.currentPrompt = {
+          key: "E",
+          text: `Strand-Begegnung: ${wisp.node.name} — ${wisp.node.epithet}`,
+          action: () => this.openEncounter(wisp.node.id),
+        };
+      }
       return;
     }
 
@@ -931,8 +952,47 @@ export class GameWorld {
       }
       audio.understand();
       this.wisps.dissolve(nodeId, this.particles);
+      // Erkenntnis-Regel (§1.5): Wer den Kern begreift, durchschaut alle Masken.
+      const masks = autoUnderstoodByNode(nodeId, this.save);
+      if (masks.length > 0) {
+        this.save.variantsUnderstood.push(...masks.map((m) => m.id));
+        const names = masks.map((m) => m.maskName).slice(0, 3).join(", ");
+        store.toast(`Du durchschaust die Maske${masks.length > 1 ? "n" : ""} sofort: ${names}${masks.length > 3 ? " …" : ""}`, "info");
+        for (const m of masks) this.wisps.dissolveVariant(m.id, this.particles);
+      }
     }
     store.set({ encounterId: null });
+    this.persist();
+  }
+
+  // ── Masken-Begegnungen (M4.2) ────────────────────────────────────
+  /** Maske begegnen: als „gefunden" vermerken (Kern-Knoten als begegnet), Overlay zeigen */
+  openVariantEncounter(variantId: string) {
+    const v = VARIANT_BY_ID.get(variantId);
+    if (!v) return;
+    if (!this.save.variantsMet.includes(variantId)) this.save.variantsMet.push(variantId);
+    if (!this.save.graph.met.includes(v.nodeId)) this.save.graph.met.push(v.nodeId);
+    if (document.pointerLockElement) document.exitPointerLock();
+    audio.select();
+    store.set({ variantId });
+    this.persist();
+  }
+
+  /** Maske begreifen: Register-Eintrag (Maske, Kern, Zeile), Einsicht, Auflösung */
+  completeVariantEncounter(variantId: string) {
+    const v = VARIANT_BY_ID.get(variantId);
+    if (!v) {
+      store.set({ variantId: null });
+      return;
+    }
+    if (!this.save.variantsUnderstood.includes(variantId)) {
+      this.save.variantsUnderstood.push(variantId);
+      grantXp(this.save.player, 4);
+      store.toast(v.begreifen, "good");
+      audio.understand();
+      this.wisps.dissolveVariant(variantId, this.particles);
+    }
+    store.set({ variantId: null });
     this.persist();
   }
 
@@ -1241,6 +1301,16 @@ export class GameWorld {
     return fogStateOf(nodeId, this.save.graph);
   }
 
+  /** QA-Hook (M4.2): aktive Masken des Tages mit Positionen */
+  get variantList(): { variantId: string; maskName: string; nodeId: string; islandId: string; x: number; z: number; drifted: boolean }[] {
+    return this.wisps.variantList();
+  }
+
+  /** QA-Hook (M4.2): Datum der laufenden Tages-Rotation */
+  get currentGameDate(): string {
+    return this.gameDate;
+  }
+
   // ── Persistenz ───────────────────────────────────────────────────
   private persist() {
     this.save.ship = { x: this.ship.x, z: this.ship.z, heading: this.ship.heading };
@@ -1481,6 +1551,17 @@ export class GameWorld {
     // NPCs & Lore-Steine
     this.npcs.update(dt, this.player.pos, this.uiLock);
     this.loreStones.update(t, this.camera.position);
+    // Tages-Rotation (M4.2): beim Tageswechsel die Masken neu setzen — kein FOMO,
+    // was verpasst wird, kommt wieder (Rotation, nie „exklusiv verfallen").
+    if (t - this.lastDateCheck > 5) {
+      this.lastDateCheck = t;
+      const d = todayIso();
+      if (d !== this.gameDate) {
+        this.gameDate = d;
+        this.wisps.spawnVariants(todaysVariants(d, this.save.graph, this.save));
+        store.toast("Ein neuer Tag — neue Masken schwirren an den Stränden. Was du verpasst, kommt wieder.", "info");
+      }
+    }
     this.wisps.update(t, focus);
 
     // Echo-Orb schwebt
