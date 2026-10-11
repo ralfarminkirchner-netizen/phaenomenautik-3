@@ -6,6 +6,7 @@ import { emptyGraphProgress, graphProgressFromIslands, type GraphProgress } from
 import type { ActiveMeal, MicroKey } from "./cooking";
 import { store } from "./store";
 import { ensureOpenWorld, isOpenWorldState, type OpenWorldState } from "./openWorld";
+import { ensureNpcMemory, type NpcMemories } from "./npcMemory";
 
 export interface GentleEncounterState {
   step: "arrival" | "signs" | "choice" | "result" | "context";
@@ -71,7 +72,7 @@ export interface SaveGame {
   lootTaken: string[]; // eingesammelte Loot-Ids
   structures: PlacedStructure[]; // gebaute Objekte
   chestsOpened: string[]; // Truhen-Ids
-  npcMemory: Record<string, { met: boolean; topics: string[]; favors: number }>;
+  npcMemory: NpcMemories;
   quests: Record<string, QuestState>;
   questProgress: Record<string, number>;
   visitedArchipelagos: string[];
@@ -277,6 +278,7 @@ export function loadSave(): SaveGame | null {
 }
 
 function prepareSave(s: SaveGame, initializeWorld = false): void {
+    ensureNpcMemory(s);
     s.echoesFound ??= [];
     s.echoDrop ??= null;
     s.crystals ??= 0;
