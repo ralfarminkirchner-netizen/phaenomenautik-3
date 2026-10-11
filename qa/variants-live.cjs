@@ -70,7 +70,7 @@ const ok = (cond, label, extra = "") => {
       g.player.group.visible = true;
       g.ship.moored = true;
     }, target);
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(3500); // Nähe-Sync (2-s-Takt) + Prompt-Aktualisierung abwarten
 
     const promptA = await page.evaluate(() => window.__game.currentPrompt?.text ?? null);
     ok(!!promptA && promptA.includes("Maske:"), `A: Prompt zeigt Maske (ist: „${promptA}“)`);
