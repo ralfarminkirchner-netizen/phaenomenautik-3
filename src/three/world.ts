@@ -36,7 +36,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 import { createFixedStepper } from "../game/fixedStep";
-import { ROOMS, ensureOpenWorld, stepOpenWorld, sampleFields, applyWorldAction, addObservation, reviseObservation, type RoomId } from "../game/openWorld";
+import { ROOMS, ensureOpenWorld, stepOpenWorld, sampleFields, applyWorldAction, addObservation, reviseObservation, syncNpcMemory, type RoomId } from "../game/openWorld";
 import { PhenomenonRooms } from "./phenomenonRooms";
 import { NODE_BY_ID } from "../game/phenomenaGraph";
 
@@ -2106,6 +2106,9 @@ export class GameWorld {
     if (this.uiLock) return "Die Welt ist gerade angehalten.";
     if (!action.startsWith("weather:") && !action.startsWith("time:") && this.getOpenWorldState().activeRoom !== room) return "Fahre zuerst zu diesem Ort.";
     const result = applyWorldAction(this.getOpenWorldState(), room, action);
+    // Erlebtes Hafenwissen wird Teil der vorhandenen NPC-Erinnerung
+    // (Mara/Tove, IDs „mara“/„tove“); ohne Eintrag bleibt die Person außerhalb.
+    syncNpcMemory(this.save, this.getOpenWorldState());
     this.rooms.update(this.getOpenWorldState(), this.elapsed, (x,z,t) => this.water.heightAt(x,z,t));
     store.set({ openWorldRevision: store.get().openWorldRevision + 1 });
     this.persist();

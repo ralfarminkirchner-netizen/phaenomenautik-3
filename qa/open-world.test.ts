@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ROOMS, createOpenWorld, ensureOpenWorld, stepOpenWorld, sampleFields, bayOptics, applyWorldAction, availableActions, addObservation, reviseObservation, isOpenWorldState, setWorldTime, setWorldWeather, type RoomId } from "../src/game/openWorld.ts";
+import { ROOMS, createOpenWorld, ensureOpenWorld, stepOpenWorld, sampleFields, bayOptics, applyWorldAction, availableActions, addObservation, reviseObservation, isOpenWorldState, setWorldTime, setWorldWeather, syncNpcMemory, knowledgeLine, type RoomId } from "../src/game/openWorld.ts";
 import { createFixedStepper } from "../src/game/fixedStep.ts";
 import { newGame, loadSave, persistSave, parseImportedSave } from "../src/game/state.ts";
 
@@ -219,4 +219,81 @@ test("explicit import validates state and preserves stale-tab and unreadable-sav
   assert.throws(() => parseImportedSave(exportRaw), /zuerst geprüft/);
   assert.equal(data.get(SAVE_KEY), "unlesbar");
   data.clear(); loadSave();
+});
+
+
+test("Mara and Tove remember only what reached them: message, delivery and retraction stay separate with place and time", () => {
+  const s = createOpenWorld();
+  stepOpenWorld(s, 5 * 60); // Welt läuft weiter, bevor im Hafen gesprochen wird
+  applyWorldAction(s, "harbor", "task-repair");
+  applyWorldAction(s, "harbor", "choose-Mara");
+  applyWorldAction(s, "harbor", "tell-Mara");
+  const told = s.harbor.knowledge.Mara[s.harbor.knowledge.Mara.length - 1];
+  assert.equal(told.kind, "message");
+  assert.equal(told.source, "heard");
+  assert.equal(told.room, "harbor");
+  assert.equal(told.at, s.seconds);
+  assert.equal(s.harbor.knowledge.Tove.length, 0, "Tove war nicht im Gespräch");
+  assert.match(applyWorldAction(s, "harbor", "ask-Tove"), /keine Absicht erzählt/);
+  applyWorldAction(s, "harbor", "deliver");
+  const delivered = s.harbor.knowledge.Mara[s.harbor.knowledge.Mara.length - 1];
+  assert.equal(delivered.kind, "delivery");
+  assert.equal(delivered.source, "seen");
+  applyWorldAction(s, "harbor", "undo-delivery");
+  const undone = s.harbor.knowledge.Mara[s.harbor.knowledge.Mara.length - 1];
+  assert.equal(undone.kind, "retraction");
+  // Die Folge bleibt in der Reihenfolge erhalten: Mitteilung → Ausführung → Rücknahme.
+  assert.deepEqual(s.harbor.knowledge.Mara.map(e => e.kind), ["message", "delivery", "retraction"]);
+  const recall = applyWorldAction(s, "harbor", "ask-Mara");
+  assert.match(recall, /Mara erinnert sich an 3 Ereignisse/);
+  assert.match(recall, /Erzählt \(gehört/);
+  assert.match(recall, /Übergabe \(gesehen/);
+  assert.match(recall, /Rücknahme \(gesehen/);
+  assert.match(recall, /Werkhafen/);
+  assert.match(recall, /Weltzeit 0:05/);
+  assert.match(recall, /außerhalb/);
+  // Jede Zeile trägt Art, Quelle, Zeit und Ort getrennt.
+  for (const entry of s.harbor.knowledge.Mara) {
+    const line = knowledgeLine(entry);
+    assert.match(line, /^(Erzählt|Übergabe|Rücknahme|Beobachtet) \((gehört|gesehen), Weltzeit \d+:\d\d:\d\d h, /);
+  }
+  // Persistenz: Nach Speichern und erneutem Laden (Neuladen) bleibt das Wissen,
+  // und Tove weiß ohne Übermittlung weiterhin nichts.
+  assert.equal(isOpenWorldState(s), true);
+  const restored = JSON.parse(JSON.stringify(s));
+  assert.equal(isOpenWorldState(restored), true);
+  assert.equal(restored.harbor.knowledge.Mara.length, 3);
+  assert.equal(restored.harbor.knowledge.Tove.length, 0);
+  assert.match(applyWorldAction(restored, "harbor", "ask-Mara"), /erinnert sich an 3 Ereignisse/);
+  assert.match(applyWorldAction(restored, "harbor", "ask-Tove"), /keine Absicht erzählt/);
+  // Alte Stände ohne Ort und Art bleiben gültig (fehlende Felder sind erlaubt).
+  const legacy = JSON.parse(JSON.stringify(s));
+  delete legacy.harbor.knowledge.Mara[0].room;
+  delete legacy.harbor.knowledge.Mara[0].kind;
+  assert.equal(isOpenWorldState(legacy), true);
+});
+
+test("harbor knowledge becomes the existing NPC memory: mara remembers, tove stays outside", () => {
+  const s = createOpenWorld();
+  applyWorldAction(s, "harbor", "task-repair");
+  applyWorldAction(s, "harbor", "choose-Mara");
+  applyWorldAction(s, "harbor", "tell-Mara");
+  applyWorldAction(s, "harbor", "deliver");
+  const save = newGame();
+  assert.equal(save.npcMemory.mara, undefined);
+  syncNpcMemory(save, s);
+  assert.equal(save.npcMemory.mara.met, true);
+  assert.equal(save.npcMemory.mara.topics.length, 2);
+  assert.ok(save.npcMemory.mara.topics.some(t => /Ausbesserung des Stegs/.test(t)));
+  assert.ok(save.npcMemory.mara.topics.some(t => /tatsächlich an Mara übergeben/.test(t)));
+  assert.equal(save.npcMemory.tove, undefined, "Tove ohne Übermittlung: kein Eintrag, kein implizites Wissen");
+  // Wiederholtes Synchronisieren verdoppelt die Themen nicht.
+  syncNpcMemory(save, s);
+  assert.equal(save.npcMemory.mara.topics.length, 2);
+  // Die Reise trägt die Erinnerung: Export und erneuter Import bewahren sie.
+  assert.equal(isOpenWorldState(s), true);
+  const saveRaw = JSON.parse(JSON.stringify({ ...save, openWorld: JSON.parse(JSON.stringify(s)) }));
+  syncNpcMemory(saveRaw, saveRaw.openWorld);
+  assert.equal(saveRaw.npcMemory.mara.topics.length, 2);
+  assert.equal(saveRaw.npcMemory.tove, undefined);
 });
