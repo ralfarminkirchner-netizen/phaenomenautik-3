@@ -60,7 +60,18 @@ export interface OpenWorldState {
   };
   shelter: { seatAngle: number; path: "near" | "wide"; invitation: boolean; boundary: "quiet" | "conversation"; knowledge: KnowledgeEntry[] };
   notes: ObservationNote[];
+  /** Freiwillige Vergleiche zwischen zwei Beobachtungen — Beziehung bleibt revidierbar. */
+  comparisons?: ObservationComparison[];
   lastRoomAction?: RoomActionRecord;
+}
+export type ComparisonRelation = "similar" | "different" | "contradicts" | "open";
+export interface ObservationComparison {
+  id: string;
+  a: string; // Beobachtungs-Id
+  b: string; // Beobachtungs-Id
+  relation: ComparisonRelation;
+  at: number;
+  revisions: { at: number; previous: ComparisonRelation }[];
 }
 const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n));
 const angle = (n: number) => ((n % 360) + 360) % 360;
@@ -74,6 +85,7 @@ export function createOpenWorld(timeOfDay = 9.4): OpenWorldState {
     harbor: { inventory: { wood: 4, rope: 2 }, task: "none", recipient: null, delivered: { wood: 0, rope: 0 }, knowledge: { Mara: [], Tove: [] }, lastDelivery: null },
     shelter: { seatAngle: 0, path: "near", invitation: false, boundary: "quiet", knowledge: [] },
     notes: [],
+    comparisons: [],
   };
   stepOpenWorld(s, 0);
   return s;
@@ -81,6 +93,8 @@ export function createOpenWorld(timeOfDay = 9.4): OpenWorldState {
 
 export function ensureOpenWorld(save: { openWorld?: OpenWorldState; timeOfDay?: number }): OpenWorldState {
   save.openWorld ??= createOpenWorld(Number.isFinite(save.timeOfDay) ? save.timeOfDay : 9.4);
+  // Alte Stände ohne Vergleichsliste bleiben gültig.
+  save.openWorld.comparisons ??= [];
   ensureHarborMaterials(save.openWorld);
   return save.openWorld;
 }
@@ -397,6 +411,26 @@ export function reviseObservation(s: OpenWorldState, id: string, text: string): 
   note.interpretation = text.trim();
 }
 
+/** Zwei Beobachtungen freiwillig vergleichen und die Beziehung speichern.
+ *  Dasselbe Paar kann später anders eingestuft werden; die frühere Beziehung
+ *  bleibt als Revision erhalten. Vergleichen ist nie eine Reisebedingung. */
+export function compareObservations(s: OpenWorldState, aId: string, bId: string, relation: ComparisonRelation): string {
+  if (aId === bId) return "Wähle zwei verschiedene Beobachtungen.";
+  const a = s.notes.find((entry) => entry.id === aId);
+  const b = s.notes.find((entry) => entry.id === bId);
+  if (!a || !b) return "Beide Beobachtungen müssen vorhanden sein.";
+  s.comparisons ??= [];
+  const existing = s.comparisons.find((c) => (c.a === aId && c.b === bId) || (c.a === bId && c.b === aId));
+  if (existing) {
+    if (existing.relation === relation) return "Diese Beziehung ist bereits festgehalten.";
+    existing.revisions.push({ at: s.seconds, previous: existing.relation });
+    existing.relation = relation;
+    return "Die Beziehung wurde revidiert; die frühere Einstufung bleibt erhalten.";
+  }
+  s.comparisons.push({ id: `vergleich-${s.comparisons.length + 1}-${Math.round(s.seconds * 1000)}`, a: aId, b: bId, relation, at: s.seconds, revisions: [] });
+  return "Der Vergleich ist festgehalten. Er bleibt freiwillig und revidierbar.";
+}
+
 // Imported JSON is checked before it can become the live world. An absent world
 // is a supported old save; a present but malformed world must never be replaced.
 export function isOpenWorldState(value: unknown): value is OpenWorldState {
@@ -461,5 +495,23 @@ export function isOpenWorldState(value: unknown): value is OpenWorldState {
       previousTime = Number(r.at);
       return true;
     });
+  }) && comparisonsValid(value.comparisons);
+}
+
+/** Vergleiche sind optional (alte Stände haben keine); vorhandene müssen gültig sein. */
+function comparisonsValid(v: unknown): boolean {
+  if (v === undefined) return true;
+  if (!Array.isArray(v)) return false;
+  const seen = new Set<string>();
+  return v.every((c) => {
+    if (!c || typeof c !== "object") return false;
+    const o = c as Record<string, unknown>;
+    if (typeof o.id !== "string" || !o.id || seen.has(o.id)) return false;
+    seen.add(o.id);
+    if (typeof o.a !== "string" || typeof o.b !== "string" || o.a === o.b) return false;
+    if (!["similar", "different", "contradicts", "open"].includes(o.relation as string)) return false;
+    if (typeof o.at !== "number" || !Number.isFinite(o.at) || o.at < 0) return false;
+    if (!Array.isArray(o.revisions)) return false;
+    return o.revisions.every((r) => r && typeof r === "object" && typeof (r as Record<string, unknown>).at === "number" && ["similar", "different", "contradicts", "open"].includes((r as Record<string, unknown>).previous as string));
   });
 }

@@ -19,6 +19,7 @@ export function OpenWorldPanel({ checkpoint, onImport }: { checkpoint: () => boo
   const [notice, setNotice] = useState("");
   const [importRaw, setImportRaw] = useState<string | null>(null);
   const [importError, setImportError] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
   const [diagnostics, setDiagnostics] = useState<ReturnType<NonNullable<ReturnType<typeof getWorld>>["getDiagnostics"]> | null>(null);
   if (!world || !state || h.paused || h.protectionOpen || h.battlePhen || h.dialogNpc || h.duelId || h.journalOpen || h.loreStone || h.chatOpen || h.cookOpen) return null;
   const room = h.activeRoom;
@@ -90,16 +91,37 @@ export function OpenWorldPanel({ checkpoint, onImport }: { checkpoint: () => boo
         <div className="condition-actions">{[{ id: "dawn", label: "Morgen" }, { id: "noon", label: "Mittag" }, { id: "dusk", label: "Abend" }].map(value => <button key={value.id} onClick={() => act(room || "bay", `time:${value.id}`)}>{value.label}</button>)}</div>
       </details>
       <details className="field-details">
-        <summary>Logbuch {state.notes.length ? `· ${state.notes.length} ${state.notes.length === 1 ? "Beobachtung" : "Beobachtungen"}` : "· noch offen"}</summary>
+        <summary>Logbuch {state.notes.length ? `· ${state.notes.length} ${state.notes.length === 1 ? "Beobachtung" : "Beobachtungen"}` : "· noch offen"}{state.comparisons?.length ? ` · ${state.comparisons.length} Vergleiche` : ""}</summary>
         {state.notes.length === 0 && <p>Segeln, Gestalten und Sammeln brauchen keinen Eintrag.</p>}
+        {state.notes.length > 1 && <p className="shelf-invitation">Zwei Beobachtungen zum Vergleichen ankreuzen — freiwillig, die Beziehung bleibt revidierbar.</p>}
         <ol className="field-notes">{state.notes.map((note, index) => <li key={note.id}>
-          <h3>{ROOMS.find(value => value.id === note.room)?.name || "Unterwegs"} · Beobachtung {index + 1}</h3>
+          <h3>{ROOMS.find(value => value.id === note.room)?.name || "Unterwegs"} · Beobachtung {index + 1}
+            {state.notes.length > 1 && <label className="note-pick"><input type="checkbox" checked={picked.includes(note.id)} onChange={() => setPicked(prev => prev.includes(note.id) ? prev.filter(id => id !== note.id) : prev.length < 2 ? [...prev, note.id] : prev)} /> vergleichen</label>}
+          </h3>
           <ul>{note.facts.map((fact, factIndex) => <li key={factIndex}>{fact}</li>)}</ul>
           {note.interpretation && <p><strong>Meine Deutung:</strong> {note.interpretation}</p>}
           {note.question && <p><strong>Offene Frage:</strong> {note.question}</p>}
           {editing === note.id ? <div className="note-revision"><label>Deutung neu formulieren<textarea value={revision} maxLength={2000} onChange={event => setRevision(event.target.value)} /></label><button onClick={() => { world.reviseObservation(note.id, revision.trim()); setEditing(null); setNotice("Die Deutung wurde geändert. Die frühere Formulierung bleibt erhalten."); }}>Revision bewahren</button><button onClick={() => setEditing(null)}>Abbrechen</button></div> : <button className="field-text-action" onClick={() => { setEditing(note.id); setRevision(note.interpretation); }}>Deutung überdenken</button>}
           {note.revisions.length > 0 && <details className="note-history"><summary>Frühere Formulierungen</summary>{note.revisions.map((entry, entryIndex) => <p key={entryIndex}>{entry.previous || "Noch keine Deutung"}</p>)}</details>}
         </li>)}</ol>
+        {picked.length === 2 && <div className="note-compare">
+          <p>Beziehung zwischen den gewählten Beobachtungen:</p>
+          {([["similar", "ähnlich"], ["different", "anders"], ["contradicts", "widerspricht"], ["open", "noch offen"]] as const).map(([relation, label]) => {
+            const existing = state.comparisons?.find((c) => (c.a === picked[0] && c.b === picked[1]) || (c.a === picked[1] && c.b === picked[0]));
+            return <button key={relation} aria-pressed={existing?.relation === relation} onClick={() => { const result = world.compareObservations(picked[0], picked[1], relation); setNotice(result); if (!/bereits/.test(result)) setPicked([]); }}>{label}</button>;
+          })}
+        </div>}
+        {state.comparisons && state.comparisons.length > 0 && <div className="note-comparisons">
+          <h3>Festgehaltene Vergleiche</h3>
+          {state.comparisons.map((c) => {
+            const a = state.notes.findIndex((n) => n.id === c.a);
+            const b = state.notes.findIndex((n) => n.id === c.b);
+            const rel = { similar: "ähnlich", different: "anders", contradicts: "widerspricht", open: "noch offen" }[c.relation];
+            return <p key={c.id}>Beobachtung {a + 1} ({ROOMS.find(r => r.id === state.notes[a]?.room)?.name}) und Beobachtung {b + 1} ({ROOMS.find(r => r.id === state.notes[b]?.room)?.name}): <strong>{rel}</strong>
+              {c.revisions.length > 0 && <span className="note-history-inline"> · früher: {c.revisions.map((r) => ({ similar: "ähnlich", different: "anders", contradicts: "widerspricht", open: "noch offen" })[r.previous]).join(", ")}</span>}
+            </p>;
+          })}
+        </div>}
       </details>
       <details className="field-details">
         <summary>Spielstand mitnehmen</summary>
