@@ -39,6 +39,7 @@ function WindVane({ yaw, windDeg, windSpeed, gust }: { yaw: number; windDeg: num
         ➤
       </span>
       <span className="tabular-nums">{windSpeed.toFixed(1)} m/s</span>
+      <span className="tabular-nums text-white/50">{Math.round(windDeg)}°</span>
       {strong && <span className="font-semibold">Bö!</span>}
     </div>
   );
