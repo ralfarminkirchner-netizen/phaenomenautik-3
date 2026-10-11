@@ -53,6 +53,33 @@ test("only a recipient's actual repair parcel can close the gap, consumed exactl
   assert.equal(isOpenWorldState(s), true);
 });
 
+for (const material of ["wood", "rope"] as const) {
+  test(`a full ${material} store rejects return atomically until room is made, then returns once`, () => {
+    const s = createOpenWorld(), materials = { stamm: 2, seil: 1 };
+    const quantity = material === "wood" ? 2 : 1;
+    s.harbor.inventory[material] = 10000;
+    act(s, "task-repair"); act(s, "choose-Mara"); act(s, "deliver");
+    transferHarborMaterial(s, materials, "unload", material, quantity);
+    assert.equal(s.harbor.inventory[material], 10000);
+    const beforeRejection = structuredClone(s), boatBefore = { ...materials };
+    assert.match(act(s, "undo-delivery"), /nicht genug Platz/);
+    assert.deepEqual(s, beforeRejection);
+    assert.deepEqual(materials, boatBefore);
+    assert.equal(isOpenWorldState(s), true);
+
+    transferHarborMaterial(s, materials, "load", material, quantity);
+    act(s, "undo-delivery");
+    assert.equal(s.harbor.inventory[material], 10000);
+    assert.deepEqual(s.harbor.delivered, { wood: 0, rope: 0 });
+    assert.equal(s.harbor.deliveries?.[0].status, "returned");
+    assert.equal(s.harbor.lastDelivery, null);
+    assert.equal(isOpenWorldState(s), true);
+    const afterReturn = structuredClone(s);
+    act(s, "undo-delivery");
+    assert.deepEqual(s, afterReturn);
+  });
+}
+
 test("supplies do not become repair material; undone parcels cannot be consumed", () => {
   const s = createOpenWorld();
   act(s, "task-supplies"); act(s, "choose-Mara"); act(s, "deliver"); act(s, "deliver");
