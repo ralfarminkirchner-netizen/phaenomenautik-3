@@ -294,8 +294,10 @@ export function applyWorldAction(s: OpenWorldState, room: RoomId, action: string
       const wood = h.task === "repair" ? 2 : 1, rope = h.task === "repair" ? 1 : 0;
       if (h.inventory.wood < wood || h.inventory.rope < rope) return "Im Lager liegt nicht genug Material für diese Zusammenstellung. Bereits abgegebenes Material bleibt am Ort.";
       if (h.delivered.wood + wood > 10000 || h.delivered.rope + rope > 10000) return "Am Übergabeort ist kein Platz für weiteres Material.";
+      const nextId = h.deliveries!.reduce((highest, entry) => Math.max(highest, entry.id), 0) + 1;
+      if (!Number.isSafeInteger(nextId)) return "Die bisherigen Materialübergaben müssen zuerst geprüft werden. Es wurde kein Material bewegt.";
       h.inventory.wood -= wood; h.inventory.rope -= rope; h.delivered.wood += wood; h.delivered.rope += rope;
-      const parcel: HarborDelivery = { id: h.deliveries!.reduce((highest, entry) => Math.max(highest, entry.id), 0) + 1, wood, rope, recipient: h.recipient, task: h.task, at: s.seconds, status: "available" };
+      const parcel: HarborDelivery = { id: nextId, wood, rope, recipient: h.recipient, task: h.task, at: s.seconds, status: "available" };
       h.deliveries!.push(parcel);
       h.lastDelivery = { wood, rope, recipient: h.recipient, task: h.task, at: s.seconds, id: parcel.id };
       const fact = `Du hast ${wood} Holz und ${rope} Seil tatsächlich an ${h.recipient} übergeben.`;
@@ -317,6 +319,7 @@ export function applyWorldAction(s: OpenWorldState, room: RoomId, action: string
       const parcel = h.lastDelivery;
       const receipt = h.deliveries!.find(entry => entry.id === parcel.id);
       if (!receipt || receipt.status !== "available") return "Dieses Paket ist bereits im Steg verbaut und kann nicht als Material zurückgenommen werden. Es entsteht kein neues Material.";
+      if (h.inventory.wood + parcel.wood > 10000 || h.inventory.rope + parcel.rope > 10000) return "Im Hafenlager ist nicht genug Platz für die Rücknahme. Lege zuerst Material ins Boot.";
       h.inventory.wood += parcel.wood; h.inventory.rope += parcel.rope; h.delivered.wood -= parcel.wood; h.delivered.rope -= parcel.rope;
       receipt.status = "returned";
       witness(h.knowledge[parcel.recipient], s, "seen", "Die letzte Materialübergabe wurde gemeinsam zurückgenommen; das Material liegt wieder im Lager.", "retraction");
