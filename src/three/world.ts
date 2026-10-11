@@ -27,7 +27,8 @@ import { computeDish, mealsToActive, mealBonus, pruneMeals, ingById, type DishRe
 import { shrinePoint } from "../game/worldLayout";
 import { PHENOMENA } from "../game/data";
 import { audio } from "../game/audio";
-import { store } from "../game/store";
+import { store, type HudState } from "../game/store";
+import { claimDigSpot } from "../game/digging";
 import { isProtectionPaused } from "../game/pause";
 import { preloadAll, extractMerged, getModel, setShadows } from "./assets";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
@@ -500,8 +501,7 @@ export class GameWorld {
     // Werkzeugwahl: 1 Axt, 2 Schaufel, 3 Enterhaken
     if (k === "1" || k === "2" || k === "3") {
       const tool = k === "1" ? "axe" : k === "2" ? "shovel" : "hook";
-      store.set({ tool });
-      store.toast(tool === "axe" ? "🪓 Axt bereit — Bäume fällen mit Klick oder E" : tool === "shovel" ? "🥄 Schaufel bereit — Klick gräbt den Boden um" : "🪝 Enterhaken bereit — Klick wirft, erneuter Klick lässt los", "info");
+      this.selectTool(tool);
     }
     if (k === "e") this.tryInteract();
     if (k === "q") this.tryDodge();
@@ -554,6 +554,14 @@ export class GameWorld {
     if (e.button === 0 && this.save.mode === "onfoot") this.useTool();
   };
 
+  private selectTool(tool: HudState["tool"]) {
+    // Ein anderes Werkzeug beendet den Seilzug, ohne einen neuen Schwung
+    // auszulösen. Bereits durch bewusstes Loslassen entstandenes Gleiten bleibt.
+    if (tool !== "hook") this.releaseHook(false);
+    store.set({ tool });
+    store.toast(tool === "axe" ? "🪓 Axt bereit — Bäume fällen mit Klick oder E" : tool === "shovel" ? "🥄 Schaufel bereit — Klick gräbt den Boden um" : "🪝 Enterhaken bereit — Klick wirft, erneuter Klick lässt los", "info");
+  }
+
   /** Klick benutzt das gewählte Werkzeug (1 Axt · 2 Schaufel · 3 Enterhaken). */
   private useTool() {
     if (this.uiLock || this.save.mode !== "onfoot") return;
@@ -577,18 +585,13 @@ export class GameWorld {
   }
 
   // ── Schaufel ──────────────────────────────────────────────────────
-  private dugSpots = new Map<string, number>(); // Rasterzelle → Zeitpunkt
-
   private dig() {
     if (this.attackCooldown > 0 || !this.player.grounded || this.player.climbing) return;
     const p = this.player.pos;
     const g = this.groundAt(p.x, p.z);
     if (g < 0.15) { store.toast("Hier ist nur Wasser — die Schaufel braucht festen Boden.", "info"); return; }
-    const cell = `${Math.round(p.x / 3)}:${Math.round(p.z / 3)}`;
-    const last = this.dugSpots.get(cell) ?? -1e9;
-    if (this.elapsed - last < 90) { store.toast("Diese Stelle ist frisch umgegraben. Ein Stück weiter lohnt sich eher.", "info"); return; }
+    if (!claimDigSpot(this.save, p.x, p.z)) { store.toast("Diese Stelle ist frisch umgegraben. Ein Stück weiter lohnt sich eher.", "info"); return; }
     this.attackCooldown = 0.65;
-    this.dugSpots.set(cell, this.elapsed);
     this.player.swing();
     audio.hit();
     const fx = Math.sin(this.player.facing), fz = Math.cos(this.player.facing);
@@ -601,23 +604,21 @@ export class GameWorld {
     // Strandfund am Wasserlinien-Sand, sonst gewöhnlicher Boden
     const beach = g < 1.6;
     const roll = Math.random();
-    window.setTimeout(() => {
-      if (this.disposed) return;
-      if (roll < (beach ? 0.5 : 0.3)) {
-        this.save.wood += 1; this.save.driftwood += 1;
-        store.toast(beach ? "+1 Treibholz — vergraben im Sand." : "+1 brauchbares Stück Holz.", "good");
-        audio.confirm();
-      } else if (roll < (beach ? 0.62 : 0.42)) {
-        this.save.crystals += 1;
-        store.toast("+1 Kristall — etwas hat im Boden geschimmert.", "good");
-        audio.understand();
-      } else if (roll < 0.8) {
-        store.toast("Steine und Wurzeln. Nichts Brauchbares.", "info");
-      } else {
-        store.toast("Nur lockere Erde.", "info");
-      }
-      this.persist();
-    }, 320);
+    if (roll < (beach ? 0.5 : 0.3)) {
+      this.save.wood += 1; this.save.driftwood += 1;
+      store.toast(beach ? "+1 Treibholz — vergraben im Sand." : "+1 brauchbares Stück Holz.", "good");
+      audio.confirm();
+    } else if (roll < (beach ? 0.62 : 0.42)) {
+      this.save.crystals += 1;
+      store.toast("+1 Kristall — etwas hat im Boden geschimmert.", "good");
+      audio.understand();
+    } else if (roll < 0.8) {
+      store.toast("Steine und Wurzeln. Nichts Brauchbares.", "info");
+    } else {
+      store.toast("Nur lockere Erde.", "info");
+    }
+    // Fund und Sperre werden zusammen gespeichert, auch vor sofortigem Reload.
+    this.persist();
   }
 
   // ── Enterhaken ────────────────────────────────────────────────────
