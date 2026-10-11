@@ -57,6 +57,17 @@ export function OpenWorldPanel({ checkpoint, onImport }: { checkpoint: () => boo
       {room && place && <section className="room-field" aria-label={`Erkundung: ${place.name}`}>
         <p className="room-reason">{place.reason}</p>
         <ul className="room-observables">{describeRoom(state, room).map((fact, index) => <li key={index}>{fact}</li>)}</ul>
+        {room === "harbor" && <details className="field-details">
+          <summary>Material zwischen Boot und Hafenlager bewegen</summary>
+          <p>Im Boot: {world.getBoatMaterials().stamm ?? 0} Holz und {world.getBoatMaterials().seil ?? 0} Seil. Im Hafenlager: {state.harbor.inventory.wood} Holz und {state.harbor.inventory.rope} Seil.</p>
+          <p>Jede Bewegung legt genau ein Stück in das andere Lager. Eine Übergabe an Mara oder Tove ist eine eigene Handlung.</p>
+          <div className="condition-actions">
+            <button onClick={() => act("harbor", "unload-wood")}>1 Holz vom Boot ins Hafenlager</button>
+            <button onClick={() => act("harbor", "unload-rope")}>1 Seil vom Boot ins Hafenlager</button>
+            <button onClick={() => act("harbor", "load-wood")}>1 Holz vom Hafenlager ins Boot</button>
+            <button onClick={() => act("harbor", "load-rope")}>1 Seil vom Hafenlager ins Boot</button>
+          </div>
+        </details>}
         <div className="room-actions">{availableActions(state, room).map(action => <button key={action.id} onClick={() => act(room, action.id)}>{action.label}</button>)}</div>
         <details className="field-details">
           <summary>Eine Beobachtung festhalten · freiwillig</summary>

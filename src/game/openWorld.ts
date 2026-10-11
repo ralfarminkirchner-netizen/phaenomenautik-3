@@ -7,6 +7,15 @@ export const ROOMS: { id: RoomId; name: string; x: number; z: number; arrivalX: 
 ];
 
 export interface KnowledgeEntry { at: number; room?: RoomId; kind?: "message" | "delivery" | "retraction" | "observation"; source: "seen" | "heard"; fact: string }
+export interface HarborDelivery {
+  id: number;
+  wood: number;
+  rope: number;
+  recipient: "Mara" | "Tove";
+  task: "repair" | "supplies";
+  at: number;
+  status: "available" | "consumed" | "returned";
+}
 export interface ObservationNote {
   id: string;
   room: RoomId;
@@ -32,7 +41,9 @@ export interface OpenWorldState {
     recipient: "Mara" | "Tove" | null;
     delivered: { wood: number; rope: number };
     knowledge: { Mara: KnowledgeEntry[]; Tove: KnowledgeEntry[] };
-    lastDelivery: { wood: number; rope: number; recipient: "Mara" | "Tove"; task: "repair" | "supplies"; at: number } | null;
+    lastDelivery: { wood: number; rope: number; recipient: "Mara" | "Tove"; task: "repair" | "supplies"; at: number; id?: number } | null;
+    deliveries?: HarborDelivery[];
+    pierRepair?: { at: number; deliveryId: number; recipient: "Mara" | "Tove"; wood: number; rope: number } | null;
   };
   shelter: { seatAngle: number; path: "near" | "wide"; invitation: boolean; boundary: "quiet" | "conversation"; knowledge: KnowledgeEntry[] };
   notes: ObservationNote[];
@@ -56,7 +67,35 @@ export function createOpenWorld(timeOfDay = 9.4): OpenWorldState {
 
 export function ensureOpenWorld(save: { openWorld?: OpenWorldState; timeOfDay?: number }): OpenWorldState {
   save.openWorld ??= createOpenWorld(Number.isFinite(save.timeOfDay) ? save.timeOfDay : 9.4);
+  ensureHarborMaterials(save.openWorld);
   return save.openWorld;
+}
+
+/** Old aggregates retain their stock; only the saved last parcel proves a purpose. */
+export function ensureHarborMaterials(s: OpenWorldState): void {
+  const h = s.harbor;
+  if (h.deliveries === undefined) {
+    h.deliveries = [];
+    if (h.lastDelivery) {
+      h.lastDelivery.id = 1;
+      h.deliveries.push({ ...h.lastDelivery, id: 1, status: "available" });
+    }
+  }
+  h.pierRepair ??= null;
+}
+
+/** Move an explicit quantity between distinct boat and local stores, never mirror them. */
+export function transferHarborMaterial(s: OpenWorldState, materials: Record<string, number>, direction: "unload" | "load", material: "wood" | "rope", quantity = 1): string {
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10000) return "Wähle eine ganze, positive Materialmenge.";
+  const key = material === "wood" ? "stamm" : "seil", name = material === "wood" ? "Holz" : "Seil";
+  const boat = materials[key] ?? 0, local = s.harbor.inventory[material];
+  if (!Number.isInteger(boat) || boat < 0 || boat > 10000) return "Der Materialbestand im Boot muss zuerst geprüft werden.";
+  const source = direction === "unload" ? boat : local, target = direction === "unload" ? local : boat;
+  if (source < quantity) return `Im ${direction === "unload" ? "Boot" : "Hafenlager"} liegt nicht genug ${name}.`;
+  if (target + quantity > 10000) return "In diesem Lager ist kein Platz für diese Menge.";
+  materials[key] = boat + (direction === "unload" ? -quantity : quantity);
+  s.harbor.inventory[material] = local + (direction === "unload" ? quantity : -quantity);
+  return `${quantity} ${name} wurde ${direction === "unload" ? "vom Boot ins Hafenlager" : "vom Hafenlager ins Boot"} gelegt. Es wurde noch an niemanden weitergegeben.`;
 }
 
 export function stepOpenWorld(s: OpenWorldState, dt: number): void {
@@ -162,7 +201,7 @@ export function describeRoom(s: OpenWorldState, room: RoomId): string[] {
     const h = s.harbor;
     return [environment, `Im Lager liegen ${h.inventory.wood} Holz und ${h.inventory.rope} Seil. Weitergegeben: ${h.delivered.wood} Holz und ${h.delivered.rope} Seil.`,
       h.task === "none" ? "Du hast noch keine Arbeit gewählt. Mara und Tove kennen nur, was sie gesehen oder gehört haben." : `Deine Absicht: ${h.task === "repair" ? "Steg ausbessern" : "Vorräte weitergeben"}. ${h.recipient ? `${h.recipient} ist als Empfängerin gewählt.` : "Eine Empfängerin ist noch offen."}`,
-      h.delivered.wood >= 2 && h.delivered.rope >= 1 ? "Am Steg liegen jetzt Holz und Seil zur Ausbesserung bereit." : "Am Steg fehlt Material für die Ausbesserung."];
+      h.pierRepair ? `Der östliche Stegabschnitt ist ausgebessert und begehbar. Dafür wurden 2 Holz und 1 Seil aus der Übergabe an ${h.pierRepair.recipient} verbaut.` : h.deliveries?.some(parcel => parcel.task === "repair" && parcel.status === "available") ? "Das für die Ausbesserung übergebene Material liegt bereit. Die Plankenlücke am östlichen Stegende ist noch offen." : "Am östlichen Stegende fehlen Planken. Für die Ausbesserung müssen 2 Holz und 1 Seil ausdrücklich an Mara oder Tove übergeben werden."];
   }
   const sh = s.shelter;
   return [environment, `Der Sitz steht bei ${Math.round(sh.seatAngle)}°. Dein Weg führt ${sh.path === "wide" ? "mit Abstand um den Ruheplatz" : "nah am Ruheplatz vorbei"}.`,
@@ -187,6 +226,7 @@ export function availableActions(s: OpenWorldState, room: RoomId): { id: string;
     { id: "tell-Mara", label: "Mara von deiner Absicht erzählen" }, { id: "tell-Tove", label: "Tove von deiner Absicht erzählen" },
     { id: "ask-Mara", label: "Mara fragen, was sie darüber weiß" }, { id: "ask-Tove", label: "Tove fragen, was sie darüber weiß" },
     { id: "deliver", label: "Material tatsächlich weitergeben" },
+    ...(!s.harbor.pierRepair ? [{ id: "repair-pier", label: "Steg mit übergebenem Material ausbessern" }] : []),
     ...(s.harbor.lastDelivery ? [{ id: "undo-delivery", label: "Letzte Übergabe gemeinsam zurücknehmen" }] : []),
   ];
   return [
@@ -196,7 +236,7 @@ export function availableActions(s: OpenWorldState, room: RoomId): { id: string;
   ];
 }
 
-export function applyWorldAction(s: OpenWorldState, room: RoomId, action: string): string {
+export function applyWorldAction(s: OpenWorldState, room: RoomId, action: string, boatMaterials?: Record<string, number>): string {
   if (action === "weather:calm" || action === "weather:breeze" || action === "weather:rain") {
     const weather = action.slice(8) as OpenWorldState["weather"];
     setWorldWeather(s, weather);
@@ -227,7 +267,13 @@ export function applyWorldAction(s: OpenWorldState, room: RoomId, action: string
     }
   }
   if (room === "harbor") {
+    ensureHarborMaterials(s);
     const h = s.harbor;
+    if (/^(unload|load)-(wood|rope)$/.test(action)) {
+      if (!boatMaterials) return "Der Materialbestand des Boots ist gerade nicht verfügbar.";
+      const [direction, material] = action.split("-") as ["unload" | "load", "wood" | "rope"];
+      return transferHarborMaterial(s, boatMaterials, direction, material);
+    }
     if (action === "task-repair" || action === "task-supplies") { h.task = action === "task-repair" ? "repair" : "supplies"; return "Du hast deine Absicht geändert. Ohne Gespräch weiß noch niemand davon."; }
     if (action === "choose-Mara" || action === "choose-Tove") { h.recipient = action === "choose-Mara" ? "Mara" : "Tove"; return `${h.recipient} ist als Empfängerin gewählt; dadurch hört sie noch keine Absicht.`; }
     if (action === "tell-Mara" || action === "tell-Tove") {
@@ -247,15 +293,32 @@ export function applyWorldAction(s: OpenWorldState, room: RoomId, action: string
       if (h.task === "none" || !h.recipient) return "Wähle zuerst eine konkrete Zusammenstellung und eine Empfängerin. Du kannst auch ohne Übergabe weitersegeln.";
       const wood = h.task === "repair" ? 2 : 1, rope = h.task === "repair" ? 1 : 0;
       if (h.inventory.wood < wood || h.inventory.rope < rope) return "Im Lager liegt nicht genug Material für diese Zusammenstellung. Bereits abgegebenes Material bleibt am Ort.";
+      if (h.delivered.wood + wood > 10000 || h.delivered.rope + rope > 10000) return "Am Übergabeort ist kein Platz für weiteres Material.";
       h.inventory.wood -= wood; h.inventory.rope -= rope; h.delivered.wood += wood; h.delivered.rope += rope;
-      h.lastDelivery = { wood, rope, recipient: h.recipient, task: h.task, at: s.seconds };
+      const parcel: HarborDelivery = { id: h.deliveries!.reduce((highest, entry) => Math.max(highest, entry.id), 0) + 1, wood, rope, recipient: h.recipient, task: h.task, at: s.seconds, status: "available" };
+      h.deliveries!.push(parcel);
+      h.lastDelivery = { wood, rope, recipient: h.recipient, task: h.task, at: s.seconds, id: parcel.id };
       const fact = `Du hast ${wood} Holz und ${rope} Seil tatsächlich an ${h.recipient} übergeben.`;
       witness(h.knowledge[h.recipient], s, "seen", fact, "delivery");
       return `${fact} Die Materialien liegen nun dort; deine ungesprochene Absicht wird dadurch nicht mitgeteilt.`;
     }
+    if (action === "repair-pier") {
+      if (h.pierRepair) return "Der Steg ist bereits ausgebessert. Es wird kein weiteres Material verbraucht.";
+      const parcel = h.deliveries!.find(entry => entry.task === "repair" && entry.status === "available" && (!h.recipient || entry.recipient === h.recipient));
+      if (!parcel) return "Für diese Ausbesserung fehlt eine verfügbare Übergabe von 2 Holz und 1 Seil an die gewählte Empfängerin. Eine Absicht oder Vorratsübergabe ersetzt sie nicht.";
+      if (h.delivered.wood < 2 || h.delivered.rope < 1) return "Das übergebene Material reicht nicht mehr aus. Der Steg wurde nicht verändert.";
+      h.delivered.wood -= 2; h.delivered.rope -= 1;
+      parcel.status = "consumed";
+      h.pierRepair = { at: s.seconds, deliveryId: parcel.id, recipient: parcel.recipient, wood: 2, rope: 1 };
+      witness(h.knowledge[parcel.recipient], s, "seen", "Wir haben die übergebenen 2 Holz und 1 Seil im östlichen Stegabschnitt verbaut. Die Plankenlücke ist geschlossen und begehbar.", "observation");
+      return `Der östliche Stegabschnitt ist mit ${parcel.recipient} ausgebessert: 2 Holz und 1 Seil sind jetzt verbaut. Du kannst den geschlossenen Abschnitt betreten.`;
+    }
     if (action === "undo-delivery" && h.lastDelivery) {
       const parcel = h.lastDelivery;
+      const receipt = h.deliveries!.find(entry => entry.id === parcel.id);
+      if (!receipt || receipt.status !== "available") return "Dieses Paket ist bereits im Steg verbaut und kann nicht als Material zurückgenommen werden. Es entsteht kein neues Material.";
       h.inventory.wood += parcel.wood; h.inventory.rope += parcel.rope; h.delivered.wood -= parcel.wood; h.delivered.rope -= parcel.rope;
+      receipt.status = "returned";
       witness(h.knowledge[parcel.recipient], s, "seen", "Die letzte Materialübergabe wurde gemeinsam zurückgenommen; das Material liegt wieder im Lager.", "retraction");
       h.lastDelivery = null;
       return "Das letzte Paket liegt wieder im Lager. Die Erinnerung an das Gespräch und die frühere Übergabe bleibt erhalten.";
@@ -317,10 +380,34 @@ export function isOpenWorldState(value: unknown): value is OpenWorldState {
   const b = value.bay, h = value.harbor, sh = value.shelter;
   if (!object(b) || !bounded(b.reflectorAngle, 0, 360) || typeof b.covered !== "boolean" || typeof b.reference !== "boolean" || !member(b.viewpoint, ["shore", "offset"]) || !knowledge(b.knowledge) || !knowledge(b.offsetKnowledge)) return false;
   if (!object(h) || !inventory(h.inventory) || !inventory(h.delivered) || !member(h.task, ["none", "repair", "supplies"]) || !member(h.recipient, [null, "Mara", "Tove"]) || !object(h.knowledge) || !knowledge(h.knowledge.Mara) || !knowledge(h.knowledge.Tove)) return false;
+  if (!object(h.delivered)) return false;
+  const receipts = h.deliveries;
+  if (receipts !== undefined) {
+    if (!Array.isArray(receipts)) return false;
+    const parcelIds = new Set<number>();
+    let availableWood = 0, availableRope = 0;
+    for (const parcel of receipts) {
+      if (!object(parcel) || !inventory(parcel) || !bounded(parcel.id, 1, Number.MAX_SAFE_INTEGER) || !Number.isInteger(parcel.id) || parcelIds.has(Number(parcel.id)) || !member(parcel.recipient, ["Mara", "Tove"]) || !member(parcel.task, ["repair", "supplies"]) || !timestamp(parcel.at) || !member(parcel.status, ["available", "consumed", "returned"])) return false;
+      if (parcel.task === "repair" ? parcel.wood !== 2 || parcel.rope !== 1 : parcel.wood !== 1 || parcel.rope !== 0) return false;
+      parcelIds.add(Number(parcel.id));
+      if (parcel.status === "available") { availableWood += Number(parcel.wood); availableRope += Number(parcel.rope); }
+    }
+    if (availableWood > Number(h.delivered.wood) || availableRope > Number(h.delivered.rope)) return false;
+  }
+  if (h.pierRepair !== undefined && h.pierRepair !== null) {
+    const repair = h.pierRepair;
+    if (!object(repair) || !timestamp(repair.at) || repair.wood !== 2 || repair.rope !== 1 || !member(repair.recipient, ["Mara", "Tove"]) || !Array.isArray(receipts)) return false;
+    const parcel = receipts.find(entry => object(entry) && entry.id === repair.deliveryId);
+    if (!object(parcel) || parcel.status !== "consumed" || parcel.task !== "repair" || parcel.recipient !== repair.recipient || Number(repair.at) < Number(parcel.at)) return false;
+  }
+  if (Array.isArray(receipts) && receipts.filter(entry => object(entry) && entry.status === "consumed").length !== (h.pierRepair ? 1 : 0)) return false;
   if (h.lastDelivery !== null) {
     const parcel = h.lastDelivery;
     if (!object(parcel) || !inventory(parcel) || !member(parcel.recipient, ["Mara", "Tove"]) || !member(parcel.task, ["repair", "supplies"]) || !timestamp(parcel.at) || !object(h.delivered)) return false;
-    if (Number(parcel.wood) > Number(h.delivered.wood) || Number(parcel.rope) > Number(h.delivered.rope)) return false;
+    const receipt = Array.isArray(receipts) ? receipts.find(entry => object(entry) && entry.id === parcel.id) : undefined;
+    if (receipts !== undefined && (!object(receipt) || receipt.status === "returned" || receipt.wood !== parcel.wood || receipt.rope !== parcel.rope || receipt.task !== parcel.task || receipt.recipient !== parcel.recipient || receipt.at !== parcel.at)) return false;
+    if (receipts === undefined && parcel.id !== undefined) return false;
+    if ((!object(receipt) || receipt.status !== "consumed") && (Number(parcel.wood) > Number(h.delivered.wood) || Number(parcel.rope) > Number(h.delivered.rope))) return false;
     if (parcel.task === "repair" ? parcel.wood !== 2 || parcel.rope !== 1 : parcel.wood !== 1 || parcel.rope !== 0) return false;
   }
   if (!object(sh) || !bounded(sh.seatAngle, 0, 360) || !member(sh.path, ["near", "wide"]) || typeof sh.invitation !== "boolean" || !member(sh.boundary, ["quiet", "conversation"]) || !knowledge(sh.knowledge) || (sh.boundary === "conversation" && !sh.invitation)) return false;
