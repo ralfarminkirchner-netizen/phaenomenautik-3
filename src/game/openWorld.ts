@@ -18,6 +18,16 @@ export interface HarborDelivery {
   at: number;
   status: "available" | "consumed" | "returned";
 }
+export interface RoomActionRecord { room: RoomId; at: number; action: string; outcome: string }
+export interface ObservationSnapshot {
+  timeOfDay: number;
+  weather: OpenWorldState["weather"];
+  wind: { x: number; z: number; speed: number };
+  tide: number;
+  visibility: number;
+  configuration: Record<string, string | number | boolean | null>;
+  action: RoomActionRecord | null;
+}
 export interface ObservationNote {
   id: string;
   room: RoomId;
@@ -26,6 +36,7 @@ export interface ObservationNote {
   interpretation: string;
   question: string;
   revisions: { at: number; text: string; previous: string }[];
+  snapshot?: ObservationSnapshot;
 }
 export interface OpenWorldState {
   seconds: number;
@@ -49,6 +60,7 @@ export interface OpenWorldState {
   };
   shelter: { seatAngle: number; path: "near" | "wide"; invitation: boolean; boundary: "quiet" | "conversation"; knowledge: KnowledgeEntry[] };
   notes: ObservationNote[];
+  lastRoomAction?: RoomActionRecord;
 }
 const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n));
 const angle = (n: number) => ((n % 360) + 360) % 360;
@@ -354,9 +366,25 @@ export function applyWorldAction(s: OpenWorldState, room: RoomId, action: string
   return "Hier hat diese Handlung gerade keine Wirkung.";
 }
 
+export function recordRoomAction(s: OpenWorldState, room: RoomId, action: string, outcome: string): void {
+  s.lastRoomAction = { room, at: s.seconds, action, outcome };
+}
+
 export function addObservation(s: OpenWorldState, room: RoomId, interpretation = "", question = ""): string {
   const id = `observation-${s.notes.length + 1}-${Math.round(s.seconds * 1000)}`;
-  s.notes.push({ id, room, at: s.seconds, facts: describeRoom(s, room), interpretation: interpretation.trim(), question: question.trim(), revisions: [] });
+  const place = roomById(room), fields = sampleFields(s, place.x, place.z);
+  const configuration: ObservationSnapshot["configuration"] = room === "bay"
+    ? { reflectorAngle: s.bay.reflectorAngle, covered: s.bay.covered, reference: s.bay.reference, viewpoint: s.bay.viewpoint }
+    : room === "harbor"
+      ? { wood: s.harbor.inventory.wood, rope: s.harbor.inventory.rope, deliveredWood: s.harbor.delivered.wood, deliveredRope: s.harbor.delivered.rope, task: s.harbor.task, recipient: s.harbor.recipient }
+      : { seatAngle: s.shelter.seatAngle, path: s.shelter.path, invitation: s.shelter.invitation, boundary: s.shelter.boundary };
+  const snapshot: ObservationSnapshot = {
+    timeOfDay: s.timeOfDay, weather: s.weather,
+    wind: { x: fields.windX, z: fields.windZ, speed: fields.windSpeed },
+    tide: fields.tide, visibility: fields.visibility, configuration,
+    action: s.lastRoomAction?.room === room ? { ...s.lastRoomAction } : null,
+  };
+  s.notes.push({ id, room, at: s.seconds, facts: describeRoom(s, room), interpretation: interpretation.trim(), question: question.trim(), revisions: [], snapshot });
   return id;
 }
 export function reviseObservation(s: OpenWorldState, id: string, text: string): void {
@@ -376,8 +404,10 @@ export function isOpenWorldState(value: unknown): value is OpenWorldState {
   const inventory = (v: unknown) => object(v) && bounded(v.wood, 0, 10000) && Number.isInteger(v.wood) && bounded(v.rope, 0, 10000) && Number.isInteger(v.rope);
   const timestamp = (v: unknown) => bounded(v, 0, object(value) && finite(value.seconds) ? value.seconds : 0);
   const knowledge = (v: unknown) => Array.isArray(v) && v.every((k) => object(k) && timestamp(k.at) && member(k.source, ["seen", "heard"]) && typeof k.fact === "string" && (k.room === undefined || member(k.room, ["bay", "harbor", "shelter"])) && (k.kind === undefined || member(k.kind, ["message", "delivery", "retraction", "observation"])));
+  const roomAction = (v: unknown): v is RoomActionRecord => object(v) && timestamp(v.at) && member(v.room, ["bay", "harbor", "shelter"]) && typeof v.action === "string" && typeof v.outcome === "string";
   if (!object(value) || !bounded(value.seconds, 0, Number.MAX_SAFE_INTEGER) || !bounded(value.dayStart, 0, 24) || !bounded(value.timeOfDay, 0, 24) || !finite(value.windAngle) || !member(value.weather, ["calm", "breeze", "rain"]) || !member(value.activeRoom, [null, "bay", "harbor", "shelter"])) return false;
   if (value.weatherOverride !== undefined && !member(value.weatherOverride, [null, "calm", "breeze", "rain"])) return false;
+  if (value.lastRoomAction !== undefined && !roomAction(value.lastRoomAction)) return false;
   if (value.camera !== undefined && (!object(value.camera) || !finite(value.camera.yaw) || !bounded(value.camera.pitch, -Math.PI, Math.PI) || !bounded(value.camera.distance, 1, 1000) || !member(value.camera.room, [null, "bay", "harbor", "shelter"]))) return false;
   const b = value.bay, h = value.harbor, sh = value.shelter;
   if (!object(b) || !bounded(b.reflectorAngle, 0, 360) || typeof b.covered !== "boolean" || typeof b.reference !== "boolean" || !member(b.viewpoint, ["shore", "offset"]) || !knowledge(b.knowledge) || !knowledge(b.offsetKnowledge)) return false;
@@ -418,6 +448,10 @@ export function isOpenWorldState(value: unknown): value is OpenWorldState {
   return value.notes.every((n) => {
     if (!object(n) || typeof n.id !== "string" || !n.id || ids.has(n.id) || !member(n.room, ["bay", "harbor", "shelter"]) || !timestamp(n.at) || !Array.isArray(n.facts) || !n.facts.every((f) => typeof f === "string") || typeof n.interpretation !== "string" || typeof n.question !== "string" || !Array.isArray(n.revisions)) return false;
     ids.add(n.id);
+    if (n.snapshot !== undefined) {
+      const snap = n.snapshot;
+      if (!object(snap) || !bounded(snap.timeOfDay, 0, 24) || !member(snap.weather, ["calm", "breeze", "rain"]) || !object(snap.wind) || !finite(snap.wind.x) || !finite(snap.wind.z) || !bounded(snap.wind.speed, 0, 1000) || !finite(snap.tide) || !bounded(snap.visibility, 0, 1000000) || !object(snap.configuration) || !Object.values(snap.configuration).every((v) => v === null || typeof v === "string" || typeof v === "boolean" || finite(v)) || (snap.action !== null && (!roomAction(snap.action) || snap.action.room !== n.room || Number(snap.action.at) > Number(n.at)))) return false;
+    }
     let previousTime = Number(n.at);
     return n.revisions.every((r) => {
       if (!object(r) || !timestamp(r.at) || Number(r.at) < previousTime || typeof r.text !== "string" || typeof r.previous !== "string") return false;

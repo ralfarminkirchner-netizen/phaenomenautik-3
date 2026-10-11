@@ -13,13 +13,18 @@ import { RECIPES, INGREDIENTS, GF_DISCLAIMER } from "../game/cooking";
 import { TACTICS } from "../game/duels";
 import { saveGfMode } from "../game/state";
 import { BodyMap } from "./BodyMap";
+import { ObservationJournal } from "./ObservationJournal";
 
-type JournalTab = "atlas" | "koerper" | "rezepte" | "kompass";
+type JournalTab = "beobachtungen" | "atlas" | "koerper" | "rezepte" | "kompass";
 
 export function JournalOverlay() {
   const [open, setOpen] = useState(store.get().journalOpen);
-  const [tab, setTab] = useState<JournalTab>("atlas");
-  useEffect(() => store.subscribe(() => setOpen(store.get().journalOpen)), []);
+  const [tab, setTab] = useState<JournalTab>("beobachtungen");
+  const [, setWorldRevision] = useState(store.get().openWorldRevision);
+  useEffect(() => store.subscribe(() => {
+    setOpen(store.get().journalOpen);
+    setWorldRevision(store.get().openWorldRevision);
+  }), []);
   if (!open) return null;
   const world = getWorld()!;
   const save = world.getSave();
@@ -33,6 +38,7 @@ export function JournalOverlay() {
   const foodStock = Object.entries(save.food).filter(([, n]) => n > 0);
 
   const TABS: { id: JournalTab; label: string }[] = [
+    { id: "beobachtungen", label: "Beobachtungen" },
     { id: "atlas", label: "🗺 Atlas" },
     { id: "koerper", label: "🧍 Körper" },
     { id: "rezepte", label: "🍲 Rezepte" },
@@ -41,15 +47,15 @@ export function JournalOverlay() {
 
   return (
     <div className="absolute inset-0 z-30 bg-black/70 backdrop-blur-sm flex items-center justify-center pointer-events-auto p-6">
-      <div className="w-full max-w-2xl max-h-[86vh] flex flex-col rounded-2xl border border-amber-200/20 bg-[#101a2a] shadow-2xl overflow-hidden">
+      <div role="dialog" aria-label="Journal" className={`w-full ${tab === "beobachtungen" ? "max-w-4xl" : "max-w-2xl"} max-h-[86vh] flex flex-col rounded-2xl border border-amber-200/20 bg-[#101a2a] shadow-2xl overflow-hidden`}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 bg-black/30">
-          <h2 className="text-lg font-bold text-amber-100 tracking-wide">📖 Atlas-Journal</h2>
+          <h2 className="text-lg font-bold text-amber-100 tracking-wide">📖 Journal</h2>
           <button className="text-white/50 hover:text-white text-lg px-2" onClick={() => store.set({ journalOpen: false })} title="Schließen (J/Esc)">
             ✕
           </button>
         </div>
         {/* Tabs */}
-        <div className="flex gap-1 px-5 pt-3 bg-black/20">
+        <div className="flex flex-wrap gap-1 px-5 pt-3 bg-black/20">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -63,6 +69,7 @@ export function JournalOverlay() {
           ))}
         </div>
         <div className="overflow-y-auto px-5 py-4 space-y-6 text-sm bg-[#16233a]">
+          {tab === "beobachtungen" && <ObservationJournal notes={world.getOpenWorldState().notes} onRevise={(id, text) => world.reviseObservation(id, text)} />}
           {tab === "koerper" && (
             <section>
               <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-3">Körperkarte — was wirkt gerade?</h3>
