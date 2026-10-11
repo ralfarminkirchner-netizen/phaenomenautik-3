@@ -2,6 +2,16 @@ import * as THREE from "three";
 import { bayOptics, type OpenWorldState } from "../game/openWorld";
 import { terrainHeight } from "../game/worldLayout";
 
+export const HARBOR_PIER = { x: 2270, z: 3300, halfWidth: 12.5, halfDepth: 5.35, repairStart: 9.5 } as const;
+const pierBaseHeight = () => Math.max(1.35, terrainHeight(HARBOR_PIER.x, HARBOR_PIER.z) + 0.5);
+/** The very same bounds and deck top used by the visible planks. */
+export function harborPierHeightAt(state: OpenWorldState, x: number, z: number): number | null {
+  const dx = x - HARBOR_PIER.x, dz = z - HARBOR_PIER.z;
+  if (Math.abs(dx) > HARBOR_PIER.halfWidth || Math.abs(dz) > HARBOR_PIER.halfDepth) return null;
+  if (dx > HARBOR_PIER.repairStart && !state.harbor.pierRepair) return null;
+  return pierBaseHeight() - 0.03;
+}
+
 /** Small, persistent arrangements in the existing sea. No separate room scene. */
 export class PhenomenonRooms {
   readonly group = new THREE.Group();
@@ -23,6 +33,9 @@ export class PhenomenonRooms {
   private readonly ropeStock: THREE.Mesh[] = [];
   private readonly repairFlag = new THREE.Group();
   private readonly suppliesFlag = new THREE.Group();
+  private readonly repairedPier = new THREE.Group();
+  private readonly damagedPier = new THREE.Group();
+  private readonly pendingRepairMaterial = new THREE.Group();
   private readonly movableSeat = new THREE.Group();
   private readonly invitationLamp = new THREE.Mesh(
     new THREE.SphereGeometry(0.28, 8, 6),
@@ -129,16 +142,33 @@ export class PhenomenonRooms {
 
   private makeHarbor() {
     const pier = new THREE.Group();
-    pier.position.set(2270, Math.max(1.35, terrainHeight(2270, 3300) + 0.5), 3300);
+    pier.position.set(HARBOR_PIER.x, pierBaseHeight(), HARBOR_PIER.z);
     for (let plank = 0; plank < 12; plank++) {
-      this.box(pier, [25, 0.24, 0.85], [0, -0.15, (plank - 5.5) * 0.9], this.timber);
+      const z = (plank - 5.5) * 0.9;
+      this.box(pier, [22, 0.24, 0.85], [-1.5, -0.15, z], this.timber);
+      this.box(this.repairedPier, [3, 0.24, 0.85], [11, -0.15, z], this.timber);
+      if (plank % 3 === 0) {
+        const broken = this.box(this.damagedPier, [1.7, 0.18, 0.6], [10.05, -0.9, z], this.darkTimber);
+        broken.rotation.z = -0.9;
+      }
     }
+    this.repairedPier.visible = false;
+    this.repairedPier.name = "Ausgebesserter Stegabschnitt";
+    this.damagedPier.name = "Beschädigter Stegabschnitt";
+    pier.add(this.repairedPier, this.damagedPier);
     for (const x of [-11, 0, 11]) {
       for (const z of [-4.5, 4.5]) this.box(pier, [0.45, 5, 0.45], [x, -2.3, z], this.darkTimber);
     }
     const repair = this.table(pier, -8, 0);
     this.box(repair, [3.9, 0.3, 1.5], [0, 1.64, 0], this.darkTimber);
     this.box(repair, [1.8, 0.15, 0.18], [-0.2, 1.88, -0.2], this.copper).rotation.y = 0.4;
+    for (const z of [-0.35, 0.35]) this.box(this.pendingRepairMaterial, [3.8, 0.12, 0.45], [0, 1.98, z], this.timber);
+    const repairRope = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.1, 5, 12), this.rope);
+    repairRope.rotation.x = Math.PI / 2;
+    repairRope.position.set(1.1, 2.14, 0.6);
+    this.pendingRepairMaterial.add(repairRope);
+    this.pendingRepairMaterial.visible = false;
+    repair.add(this.pendingRepairMaterial);
     const supplies = this.table(pier, 0, 0);
     for (let i = 0; i < 18; i++) {
       const plank = this.box(supplies, [3.7, 0.12, 0.46], [0, 1.55 + Math.floor(i / 3) * 0.14, (i % 3 - 1) * 0.5], this.timber);
@@ -216,6 +246,9 @@ export class PhenomenonRooms {
     this.ropeStock.forEach((mesh, i) => { mesh.visible = i < state.harbor.inventory.rope; });
     this.repairFlag.visible = state.harbor.task === "repair";
     this.suppliesFlag.visible = state.harbor.task === "supplies";
+    this.repairedPier.visible = !!state.harbor.pierRepair;
+    this.damagedPier.visible = !state.harbor.pierRepair;
+    this.pendingRepairMaterial.visible = !!state.harbor.deliveries?.some(parcel => parcel.task === "repair" && parcel.status === "available");
     const wide = state.shelter.path === "wide";
     this.movableSeat.rotation.y = THREE.MathUtils.degToRad(state.shelter.seatAngle);
     this.invitationLamp.visible = state.shelter.invitation;
