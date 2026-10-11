@@ -36,8 +36,8 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 import { createFixedStepper } from "../game/fixedStep";
-import { ROOMS, ensureOpenWorld, stepOpenWorld, sampleFields, applyWorldAction, addObservation, reviseObservation, syncNpcMemory, type RoomId } from "../game/openWorld";
-import { PhenomenonRooms } from "./phenomenonRooms";
+import { ROOMS, ensureOpenWorld, stepOpenWorld, sampleFields, applyWorldAction, recordRoomAction, addObservation, reviseObservation, syncNpcMemory, type RoomId } from "../game/openWorld";
+import { PhenomenonRooms, harborPierHeightAt } from "./phenomenonRooms";
 import { NODE_BY_ID } from "../game/phenomenaGraph";
 
 export type PresentationMode = "title" | "arrival" | "look" | "mark" | "distance";
@@ -310,6 +310,8 @@ export class GameWorld {
     const ct = cliffTopAt(x, z); // Felsturm-Plateaus (Kletterwände)
     let g = ct !== null && ct > base ? ct : base;
     if (st !== null && st > g) g = st;
+    const pier = harborPierHeightAt(this.getOpenWorldState(), x, z);
+    if (pier !== null && pier > g) g = pier;
     return g;
   }
 
@@ -2099,6 +2101,8 @@ export class GameWorld {
 
   getOpenWorldState() { return ensureOpenWorld(this.save); }
 
+  getBoatMaterials(): Readonly<Record<string, number>> { return this.save.materials; }
+
   travelToRoom(id: RoomId): void {
     if (this.uiLock) return;
     const room = ROOMS.find(r => r.id === id);
@@ -2120,7 +2124,8 @@ export class GameWorld {
   actInRoom(room: RoomId, action: string): string {
     if (this.uiLock) return "Die Welt ist gerade angehalten.";
     if (!action.startsWith("weather:") && !action.startsWith("time:") && this.getOpenWorldState().activeRoom !== room) return "Fahre zuerst zu diesem Ort.";
-    const result = applyWorldAction(this.getOpenWorldState(), room, action);
+    const result = applyWorldAction(this.getOpenWorldState(), room, action, this.save.materials);
+    recordRoomAction(this.getOpenWorldState(), room, action, result);
     // Erlebtes Hafenwissen wird Teil der vorhandenen NPC-Erinnerung
     // (Mara/Tove, IDs „mara“/„tove“); ohne Eintrag bleibt die Person außerhalb.
     syncNpcMemory(this.save, this.getOpenWorldState());

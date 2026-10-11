@@ -180,7 +180,8 @@ export function HUD() {
 
       {/* Ressourcen unten rechts */}
       <div className="absolute bottom-5 right-5 text-right text-white/90 text-sm drop-shadow space-y-1">
-        <div>🪵 Holz: <span className="font-semibold">{h.wood}</span></div>
+        <div>🪵 Holzstücke: <span className="font-semibold">{h.wood}</span></div>
+        <div className="text-xs text-white/70">Für Feuer und Axtausbau</div>
         <div>💎 Kristalle: <span className="font-semibold">{h.crystals}</span></div>
         <div className="text-xs text-white/70">
           {buffLeft > 0 && <span className="mr-2 text-amber-300">🔥 {Math.floor(buffLeft / 60)}:{String(buffLeft % 60).padStart(2, "0")}</span>}

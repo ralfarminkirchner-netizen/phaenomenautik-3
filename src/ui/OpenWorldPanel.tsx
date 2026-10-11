@@ -59,12 +59,13 @@ export function OpenWorldPanel({ checkpoint, onImport }: { checkpoint: () => boo
         <ul className="room-observables">{describeRoom(state, room).map((fact, index) => <li key={index}>{fact}</li>)}</ul>
         {room === "harbor" && <details className="field-details">
           <summary>Material zwischen Boot und Hafenlager bewegen</summary>
-          <p>Im Boot: {world.getBoatMaterials().stamm ?? 0} Holz und {world.getBoatMaterials().seil ?? 0} Seil. Im Hafenlager: {state.harbor.inventory.wood} Holz und {state.harbor.inventory.rope} Seil.</p>
+          <p>Im Boot: {world.getBoatMaterials().stamm ?? 0} Baustämme und {world.getBoatMaterials().seil ?? 0} Seil. Im Hafenlager: {state.harbor.inventory.wood} Baustämme und {state.harbor.inventory.rope} Seil.</p>
+          <p>Hier bewegst du Treibstämme aus dem Bootinventar. Die kleinen Holzstücke für Feuer und Axtausbau werden getrennt gesammelt.</p>
           <p>Jede Bewegung legt genau ein Stück in das andere Lager. Eine Übergabe an Mara oder Tove ist eine eigene Handlung.</p>
           <div className="condition-actions">
-            <button onClick={() => act("harbor", "unload-wood")}>1 Holz vom Boot ins Hafenlager</button>
+            <button onClick={() => act("harbor", "unload-wood")}>1 Baustamm vom Boot ins Hafenlager</button>
             <button onClick={() => act("harbor", "unload-rope")}>1 Seil vom Boot ins Hafenlager</button>
-            <button onClick={() => act("harbor", "load-wood")}>1 Holz vom Hafenlager ins Boot</button>
+            <button onClick={() => act("harbor", "load-wood")}>1 Baustamm vom Hafenlager ins Boot</button>
             <button onClick={() => act("harbor", "load-rope")}>1 Seil vom Hafenlager ins Boot</button>
           </div>
         </details>}
