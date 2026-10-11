@@ -98,65 +98,72 @@ export function JournalOverlay() {
                   </div>
                 );
               })}
-              {maskNodeIds.map((nodeId) => {
-                const node = NODE_BY_ID.get(nodeId);
-                if (!node) return null;
-                const masks = VARIANTS.filter((x) => x.nodeId === nodeId);
-                const got = masks.filter((x) => variantState(x, save.graph, save) !== "unerkannt").length;
-                return (
-                  <div key={nodeId} className="mt-3">
-                    <div className="text-[13px] text-white/80 mb-1">
-                      <span style={{ color: `hsl(${node.hue}, 70%, 70%)` }} className="font-semibold">
-                        {node.name}
-                      </span>
-                      <span className="ml-2 text-white/40 text-xs">{got}/{masks.length} Masken erkannt</span>
-                    </div>
-                    <ul className="space-y-1.5">
-                      {masks.map((x) => {
-                        const st = variantState(x, save.graph, save);
-                        return (
-                          <li
-                            key={x.id}
-                            className={`rounded-lg border px-3 py-2 ${
-                              st === "begriffen"
-                                ? "bg-black/30 border-amber-200/25"
-                                : st === "gefunden"
-                                  ? "bg-black/20 border-white/10"
-                                  : "bg-black/10 border-white/5"
-                            }`}
-                          >
-                            <div className="flex items-baseline justify-between">
-                              <span
-                                className={
-                                  st === "unerkannt"
-                                    ? "text-white/30 italic"
-                                    : st === "gefunden"
-                                      ? "text-white/60"
-                                      : "font-semibold"
-                                }
-                                style={st === "begriffen" ? { color: `hsl(${x.hue}, 70%, 72%)` } : undefined}
-                              >
-                                {st === "unerkannt" ? "Eine noch unerkannte Maske …" : x.maskName}
-                              </span>
-                              <span className="text-[10px] uppercase tracking-wider text-white/35">
-                                {st === "begriffen" ? "begriffen ✦" : st === "gefunden" ? "gefunden" : "unerkannt"}
-                              </span>
-                            </div>
-                            {st === "begriffen" && (
-                              <>
-                                <div className="text-white/75 text-xs leading-relaxed mt-1">{x.line}</div>
-                                <div className="text-amber-200/70 text-[11px] leading-relaxed mt-1 border-l-2 border-amber-200/30 pl-2">
-                                  {x.begreifen}
-                                </div>
-                              </>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
+              {(() => {
+                const recognizedNodeIds = maskNodeIds.filter((nodeId) =>
+                  VARIANTS.some((x) => x.nodeId === nodeId && variantState(x, save.graph, save) !== "unerkannt"),
                 );
-              })}
+                if (recognizedNodeIds.length === 0) {
+                  return (
+                    <p className="text-white/45 italic mt-3">
+                      Noch keine Maske gefunden. Sie schwirren an den Stränden der alten Städte und treiben im Meer vor
+                      den Kontinenten — vom Schiff aus sieht man sie am ehesten. Was du verpasst, kommt wieder.
+                    </p>
+                  );
+                }
+                return recognizedNodeIds.map((nodeId) => {
+                  const node = NODE_BY_ID.get(nodeId);
+                  if (!node) return null;
+                  const masks = VARIANTS.filter((x) => x.nodeId === nodeId);
+                  const got = masks.filter((x) => variantState(x, save.graph, save) !== "unerkannt").length;
+                  return (
+                    <div key={nodeId} className="mt-3">
+                      <div className="text-[13px] text-white/80 mb-1">
+                        <span style={{ color: `hsl(${node.hue}, 70%, 70%)` }} className="font-semibold">
+                          {node.name}
+                        </span>
+                        <span className="ml-2 text-white/40 text-xs">{got}/{masks.length} Masken erkannt</span>
+                      </div>
+                      <ul className="space-y-1.5">
+                        {masks.map((x) => {
+                          const st = variantState(x, save.graph, save);
+                          return (
+                            <li
+                              key={x.id}
+                              className={`rounded-lg border px-3 py-2 ${
+                                st === "begriffen"
+                                  ? "bg-black/30 border-amber-200/25"
+                                  : st === "gefunden"
+                                    ? "bg-black/20 border-white/10"
+                                    : "bg-black/10 border-white/5"
+                              }`}
+                            >
+                              <div className="flex items-baseline justify-between">
+                                <span
+                                  className={st === "unerkannt" ? "text-white/30 italic" : st === "gefunden" ? "text-white/60" : "font-semibold"}
+                                  style={st === "begriffen" ? { color: `hsl(${x.hue}, 70%, 72%)` } : undefined}
+                                >
+                                  {st === "unerkannt" ? "Eine noch unerkannte Maske …" : x.maskName}
+                                </span>
+                                <span className="text-[10px] uppercase tracking-wider text-white/35">
+                                  {st === "begriffen" ? "begriffen ✦" : st === "gefunden" ? "gefunden" : "unerkannt"}
+                                </span>
+                              </div>
+                              {st === "begriffen" && (
+                                <>
+                                  <div className="text-white/75 text-xs leading-relaxed mt-1">{x.line}</div>
+                                  <div className="text-amber-200/70 text-[11px] leading-relaxed mt-1 border-l-2 border-amber-200/30 pl-2">
+                                    {x.begreifen}
+                                  </div>
+                                </>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  );
+                });
+              })()}
             </section>
           )}
           {tab === "koerper" && (

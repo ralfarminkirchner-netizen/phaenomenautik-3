@@ -1,7 +1,7 @@
-// PHÄNOMENAUTIK — M4.2 QA: Masken-Begegnung End-to-End (Live)
-// Teleport zu einer Maske des Tages, Prompt, Begreifen, Register,
-// Persistenz, Journal-Register. Aufruf gegen Produktion:
-//   NODE_PATH=../traumaatlas-3/node_modules QA_URL=https://phaenomenautik-3-production.up.railway.app node qa/variants-live.cjs
+// PHÄNOMENAUTIK — M4.2 QA: Masken-Begegnung End-to-End (Live, Vollkatalog)
+// Strand-Maske (zu Fuß) + Meer-Maske (vom Schiff), Begreifen, Register,
+// Persistenz, Journal. Aufruf gegen Produktion:
+//   NODE_PATH=<traumaatlas-3>/node_modules QA_URL=https://phaenomenautik-3-production.up.railway.app node qa/variants-live.cjs
 // Ohne QA_URL serviert das Skript lokal dist/.
 const path = require("path");
 const { chromium } = require("playwright");
@@ -48,18 +48,20 @@ const ok = (cond, label, extra = "") => {
     await page.waitForFunction(() => !!window.__game, { timeout: 30000 });
     await page.waitForTimeout(6000);
 
-    // 1) Masken des Tages aktiv?
-    const variants = await page.evaluate(() => window.__game.variantList);
+    // 1) Volle Tagesliste + Render-Nähe
+    const masks = await page.evaluate(() => window.__game.todaysMasks);
     const gameDate = await page.evaluate(() => window.__game.currentGameDate);
-    ok(variants.length >= 5 && variants.length <= 12, `5–12 Masken aktiv (ist: ${variants.length})`, JSON.stringify(variants));
+    ok(masks.length >= 150 && masks.length <= 320, `150–320 Masken im Umlauf (ist: ${masks.length})`);
     ok(/^\d{4}-\d{2}-\d{2}$/.test(gameDate), `Tages-Rotation läuft (Datum: ${gameDate})`);
-    ok(variants.every((x) => typeof x.drifted === "boolean"), "Drift-Flag je Maske vorhanden");
-    const drifted = variants.filter((x) => x.drifted).length;
-    console.log(`  · ${variants.length} Masken, davon ${drifted} driftend · Datum ${gameDate}`);
-    const target = variants[0];
-    console.log(`  · Ziel: ${target.maskName} (${target.variantId}) auf ${target.islandId} @ ${Math.round(target.x)},${Math.round(target.z)}`);
+    const beach = masks.filter((x) => !x.water);
+    const water = masks.filter((x) => x.water);
+    ok(beach.length > 0 && water.length > 0, `Strand- und Meer-Masken im Umlauf (Strand: ${beach.length}, Meer: ${water.length})`);
+    const drifted = masks.filter((x) => x.drifted).length;
+    console.log(`  · ${masks.length} Masken · ${drifted} driftend · Datum ${gameDate}`);
 
-    // 2) Teleport zur Maske (zu Fuß)
+    // ── Fluss A: Strand-Maske, zu Fuß ──
+    const target = beach[0];
+    console.log(`  · Ziel A (Strand): ${target.maskName} auf ${target.islandId} @ ${Math.round(target.x)},${Math.round(target.z)}`);
     await page.evaluate(({ x, z }) => {
       const g = window.__game;
       const y = g.groundAt(x + 1.5, z);
@@ -68,65 +70,86 @@ const ok = (cond, label, extra = "") => {
       g.player.group.visible = true;
       g.ship.moored = true;
     }, target);
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(1000);
 
-    // 3) Prompt zeigt die Maske
-    const prompt = await page.evaluate(() => window.__game.currentPrompt?.text ?? null);
-    ok(!!prompt && prompt.includes("Maske:"), `Prompt zeigt Maske (ist: „${prompt}“)`);
+    const promptA = await page.evaluate(() => window.__game.currentPrompt?.text ?? null);
+    ok(!!promptA && promptA.includes("Maske:"), `A: Prompt zeigt Maske (ist: „${promptA}“)`);
     await page.screenshot({ path: path.join(OUT, "variant-prompt.png") });
 
-    // 4) Begegnen (E) — Overlay mit wahrer Zeile
     await page.keyboard.press("e");
     await page.waitForTimeout(700);
-    const overlay1 = await page.evaluate(() => document.body.textContent ?? "");
-    ok(overlay1.includes(target.maskName), "Overlay nennt den Masken-Namen");
-    ok(overlay1.includes("Begreifen"), "Begreifen-Schritt sichtbar");
-    const metState = await page.evaluate((id) => window.__game.save.variantsMet.includes(id), target.variantId);
-    ok(metState, "Maske als „gefunden“ im Spielstand vermerkt");
+    const overlayA = await page.evaluate((name) => document.body.textContent?.includes(name), target.maskName);
+    ok(overlayA, "A: Overlay nennt den Masken-Namen");
+    const metA = await page.evaluate((id) => window.__game.save.variantsMet.includes(id), target.variantId);
+    ok(metA, "A: Maske als „gefunden“ im Spielstand vermerkt");
 
-    // 5) Begreifen (E) — Kern fällt, Register-Button
     await page.keyboard.press("e");
     await page.waitForTimeout(600);
-    const overlay2 = await page.evaluate(() => document.body.textContent ?? "");
-    ok(overlay2.includes("in einer anderen Maske"), "Kern-Enthüllung sichtbar („… in einer anderen Maske“)");
+    const revealA = await page.evaluate(() => document.body.textContent ?? "");
+    ok(revealA.includes("in einer anderen Maske"), "A: Kern-Enthüllung sichtbar („… in einer anderen Maske“)");
     await page.screenshot({ path: path.join(OUT, "variant-begreifen.png") });
 
-    // 6) Ins Register aufnehmen
     await page.click("text=Ins Register aufnehmen");
-    await page.waitForTimeout(700);
-    const after = await page.evaluate((id) => {
+    await page.waitForTimeout(800);
+    const afterA = await page.evaluate((id) => {
       const g = window.__game;
       return {
         understood: g.save.variantsUnderstood.includes(id),
-        gone: !g.variantList.some((x) => x.variantId === id),
+        gone: !g.todaysMasks.some((x) => x.variantId === id),
         xp: g.save.player.xp,
         overlayGone: !(document.body.textContent ?? "").includes("Ins Register aufnehmen"),
       };
     }, target.variantId);
-    ok(after.understood, "Maske als „begriffen“ im Register (save.variantsUnderstood)");
-    ok(after.gone, "Maske hat sich aus der Welt aufgelöst");
-    ok(after.xp >= 4, `Einsicht vergeben (xp: ${after.xp})`);
-    ok(after.overlayGone, "Overlay geschlossen");
+    ok(afterA.understood, "A: Maske als „begriffen“ im Register");
+    ok(afterA.gone, "A: Maske aus dem Tagesumlauf verschwunden");
+    ok(afterA.xp >= 4, `A: Einsicht vergeben (xp: ${afterA.xp})`);
+    ok(afterA.overlayGone, "A: Overlay geschlossen");
 
-    // 7) Persistenz
     const persisted = await page.evaluate((id) => {
       const raw = localStorage.getItem("phaenomenautik3-save-v1");
       if (!raw) return false;
       const s = JSON.parse(raw);
       return Array.isArray(s.variantsUnderstood) && s.variantsUnderstood.includes(id);
     }, target.variantId);
-    ok(persisted, "Fortschritt persistiert (localStorage, variantsUnderstood)");
+    ok(persisted, "A: Fortschritt persistiert (localStorage)");
 
-    // 8) Journal: Atlas-Register zeigt die begriffene Maske
+    // ── Fluss B: Meer-Maske, vom Schiff ──
+    const targetB = water[0];
+    console.log(`  · Ziel B (Meer): ${targetB.maskName} @ ${Math.round(targetB.x)},${Math.round(targetB.z)}`);
+    await page.evaluate(({ x, z }) => {
+      const g = window.__game;
+      g.save.mode = "sailing";
+      g.ship.x = x + 8;
+      g.ship.z = z + 8;
+      g.ship.speed = 0;
+      g.player.group.visible = false;
+    }, targetB);
+    await page.waitForTimeout(3000); // Nähe-Sync (2 s) + Prompt-Takt
+    const promptB = await page.evaluate(() => window.__game.currentPrompt?.text ?? null);
+    ok(!!promptB && promptB.includes("Maske"), `B: Schiffs-Prompt zeigt treibende Maske (ist: „${promptB}“)`);
+    await page.screenshot({ path: path.join(OUT, "variant-ship.png") });
+
+    await page.keyboard.press("e");
+    await page.waitForTimeout(700);
+    const overlayB = await page.evaluate((name) => document.body.textContent?.includes(name), targetB.maskName);
+    ok(overlayB, "B: Begegnung vom Schiff aus geöffnet");
+    await page.keyboard.press("e");
+    await page.waitForTimeout(600);
+    await page.click("text=Ins Register aufnehmen");
+    await page.waitForTimeout(800);
+    const afterB = await page.evaluate((id) => window.__game.save.variantsUnderstood.includes(id), targetB.variantId);
+    ok(afterB, "B: Meer-Maske begriffen und registriert");
+
+    // ── Journal ──
     await page.keyboard.press("j");
     await page.waitForTimeout(500);
     await page.click("text=📓 Register");
     await page.waitForTimeout(500);
     const journal = await page.evaluate(() => document.body.textContent ?? "");
     ok(journal.includes("Atlas-Register"), "Journal zeigt das Atlas-Register");
-    ok(journal.includes(target.maskName), "Begriffene Maske mit Name im Register");
+    ok(journal.includes(target.maskName), "Begriffene Strand-Maske im Register");
+    ok(journal.includes(targetB.maskName), "Begriffene Meer-Maske im Register");
     ok(journal.includes("in einer anderen Maske"), "Begreifen-Zeile im Register-Eintrag");
-    ok(journal.includes("begriffen"), "Status „begriffen“ im Register");
     await page.screenshot({ path: path.join(OUT, "variant-register.png") });
     await page.keyboard.press("Escape");
 

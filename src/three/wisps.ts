@@ -17,6 +17,8 @@ export type WispItem =
 export class Wisps {
   private items: WispItem[] = [];
   private scene: THREE.Scene;
+  /** M4.2 (Vollkatalog): alle Masken des Tages — aktiv gerendert wird nur die Nähe. */
+  private variantDay: VariantSpawn[] = [];
 
   constructor(scene: THREE.Scene, progress: GraphProgress) {
     this.scene = scene;
@@ -26,15 +28,38 @@ export class Wisps {
     }
   }
 
-  /** M4.2: Tages-Rotation — Masken des Tages in die Welt setzen (ersetzt die alte Liste). */
-  spawnVariants(spawns: VariantSpawn[]) {
+  /** M4.2: Tagesliste setzen (Rotation, Drift) — aktive Masken werden erst bei Nähe gerendert. */
+  setVariantDay(spawns: VariantSpawn[]) {
+    this.variantDay = spawns;
     for (let i = this.items.length - 1; i >= 0; i--) {
       if (this.items[i].kind === "variant") {
         this.scene.remove(this.items[i].obj);
         this.items.splice(i, 1);
       }
     }
-    for (const spawn of spawns) this.spawnVariant(spawn);
+  }
+
+  /** M4.2 (Vollkatalog): aktive Masken an die Spieler-Nähe angleichen (Diff nach variant.id). */
+  syncVariantSpawns(near: VariantSpawn[]) {
+    const nearIds = new Set(near.map((s) => s.variant.id));
+    for (let i = this.items.length - 1; i >= 0; i--) {
+      const it = this.items[i];
+      if (it.kind === "variant" && !nearIds.has(it.spawn.variant.id)) {
+        this.scene.remove(it.obj);
+        this.items.splice(i, 1);
+      }
+    }
+    const active = new Set(
+      this.items.filter((w) => w.kind === "variant").map((w) => (w as { spawn: VariantSpawn }).spawn.variant.id),
+    );
+    for (const spawn of near) {
+      if (!active.has(spawn.variant.id)) this.spawnVariant(spawn);
+    }
+  }
+
+  /** QA (M4.2): die volle Tagesliste (unabhängig von der Nähe) */
+  get todaysVariantSpawns(): VariantSpawn[] {
+    return this.variantDay;
   }
 
   private makeBody(hue: number, sizeScale: number) {
@@ -89,7 +114,7 @@ export class Wisps {
     this.items.push({ kind: "variant", spawn, node, obj, core, motes, phase: Math.random() * Math.PI * 2 });
   }
 
-  /** Nächster aktiver Strandläufer/Maske im Radius r (für die Interaktion) */
+  /** Nächster aktiver Strandläufer/Maske im Radius r (für die Interaktion zu Fuß) */
   nearest(x: number, z: number, r: number): WispItem | null {
     let best: WispItem | null = null;
     let bd = r * r;
@@ -105,13 +130,28 @@ export class Wisps {
     return best;
   }
 
+  /** M4.2: Nächste aktive Maske im Radius r (für die Begegnung vom Schiff) */
+  nearestVariant(x: number, z: number, r: number): WispItem | null {
+    let best: WispItem | null = null;
+    let bd = r * r;
+    for (const w of this.items) {
+      if (w.kind !== "variant") continue;
+      const d2 = (w.spawn.x - x) ** 2 + (w.spawn.z - z) ** 2;
+      if (d2 < bd) {
+        bd = d2;
+        best = w;
+      }
+    }
+    return best;
+  }
+
   /** QA/Register: aktive Strandläufer mit Position */
   list(): { nodeId: string; x: number; z: number }[] {
     return this.items.filter((w) => w.kind === "strand").map((w) => ({ nodeId: (w.node as PhenomenonNode).id, x: (w as { def: StrandEncounterDef }).def.x, z: (w as { def: StrandEncounterDef }).def.z }));
   }
 
-  /** QA (M4.2): aktive Masken des Tages */
-  variantList(): { variantId: string; maskName: string; nodeId: string; islandId: string; x: number; z: number; drifted: boolean }[] {
+  /** QA (M4.2): aktive Masken in Render-Nähe */
+  variantList(): { variantId: string; maskName: string; nodeId: string; islandId: string | null; x: number; z: number; drifted: boolean }[] {
     return this.items.filter((w) => w.kind === "variant").map((w) => {
       const it = w as { spawn: VariantSpawn };
       return {

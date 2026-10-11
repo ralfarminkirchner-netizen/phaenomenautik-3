@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════
 // PHÄNOMENAUTIK — M4.2: DER VARIANTEN-MOTOR („Catch 'em all, würdevoll")
-// Varianten = Masken derselben Wahrheit. Jeder Phänomen-Knoten bekommt
+// Varianten = Masken derselben Wahrheit. Jeder Phänomen-Knoten hat
 // 3–8 Ausprägungen: gleicher Kern, anderes Kostüm, andere wahre Zeile.
 //
 // Regeln (Brief §1.5, verbindlich):
@@ -11,21 +11,16 @@
 //  · Begreifen statt Fangen. Tonlage: Zärtlichkeit. Immer.
 //  · Wer den Kern begreift, durchschaut alle seine Masken auf den
 //    ersten Blick (Erkenntnis-Regel §1.5).
+//  · Alle Knoten tragen Masken (außer dem Auge — das Auge ist die
+//    Mitte, keine Maske). Strand-Masken an Hauptstädten (zu Fuß),
+//    Meer-Masken schwimmen vor dem Kontinent (begegnbar vom Schiff).
 // Reines TS-Datenmodul, keine Laufzeit-Abhängigkeiten (kein three.js).
 // ═══════════════════════════════════════════════════════════════════
 
 import { ISLANDS, terrainHeight, terrainSlope } from "./worldLayout";
-import { NODE_BY_ID, dailySeed, hashId, neighborIndex, type GraphProgress } from "./phenomenaGraph";
+import { NODE_BY_ID, GRAPH_NODES, dailySeed, hashId, neighborIndex, type GraphProgress, type PhenomenonNode } from "./phenomenaGraph";
 import { mulberry32 } from "./noise";
-
-// Für QA: Nachbarschafts-Index (Kanten gelten beidseitig) + Knoten-Lookup durchreichen.
-export { neighborIndex, NODE_BY_ID };
-
-/** Hash mit hoch-Bit-Avalanche (FNV-Niederwertbits sind für ähnliche Strings zu schwach). */
-function mix(s: string): number {
-  const raw = hashId(s);
-  return (raw ^ (raw >>> 16)) >>> 0;
-}
+import { MASK_TUPLES } from "./variantMasks";
 
 // ─── Datenmodell (Brief §1.5.1) ────────────────────────────────────
 
@@ -45,12 +40,40 @@ export interface VariantDef {
   begreifen: string; // Enthüllung: „Das war … — in einer anderen Maske"
 }
 
+// ─── Katalog-Aufbau: Masken-Daten → VariantDef ─────────────────────
+// Die ersten 12 Masken (unten, v()) sind der redaktionelle
+// Qualitätsmaßstab — vollständig handschriftlich. Der große Katalog
+// (variantMasks.ts) bringt pro Knoten drei Masken: Maske (Name,
+// Beiname, wahre Zeile) + ein Wahrheits-Satz; das Ritual „Das war X —
+// in einer anderen Maske“ setzt der Katalog selbst. Farbe und Gestalt
+// leiten sich deterministisch vom Kern-Knoten ab.
+
+function coreShortName(nodeId: string): string {
+  const n = NODE_BY_ID.get(nodeId);
+  if (!n) return nodeId;
+  return n.name.replace(/^(Der|Die|Das) /, "").split(",")[0];
+}
+
 function v(
   id: string, nodeId: string, maskName: string, epithet: string,
   hue: number, sizeScale: number, line: string, begreifen: string,
 ): VariantDef {
   return { id, nodeId, maskName, epithet, hue, sizeScale, spawnRules: { drift: true }, line, begreifen };
 }
+
+const HUE_OFFSETS = [-32, 24, 52];
+const SIZES = [1.1, 0.8, 1.3];
+
+function m(id: string, nodeId: string, maskName: string, epithet: string, line: string, truth: string): VariantDef {
+  const node = NODE_BY_ID.get(nodeId);
+  if (!node) throw new Error(`Maske ohne gültigen Kern-Knoten: ${id} -> ${nodeId}`);
+  const idx = m.counters[nodeId] = (m.counters[nodeId] ?? 0) + 1;
+  const hue = (((node.hue + HUE_OFFSETS[idx % 3]) % 360) + 360) % 360;
+  const sizeScale = SIZES[idx % 3];
+  const begreifen = `Das war ${coreShortName(nodeId)} — in einer anderen Maske. ${truth}`;
+  return { id, nodeId, maskName, epithet, hue, sizeScale, spawnRules: { drift: true }, line, begreifen };
+}
+m.counters = {} as Record<string, number>;
 
 // ─── Die ersten 12 Masken — redaktioneller Qualitätsmaßstab ────────
 // Vier Knoten (die Hauptstädte der ersten Stunde), je drei Masken.
@@ -61,7 +84,7 @@ const HYPERVIGILANZ = "hypervigilanz";
 const DISSOZIATION = "dissoziation";
 const ERSTARUNG = "erstarrung";
 
-export const VARIANTS: readonly VariantDef[] = [
+const QUALITY_12: VariantDef[] = [
   // ── Das Herzrasen (Galopp ohne Pferd) ──
   v("rasendes-herz", HERZRASEN, "Das rasende Herz", "Rennt, als gäbe es ein Ziel", 350, 1.1,
     "Es rennt, als gäbe es ein Ziel. Aber es gibt kein Ziel — es gibt nur dich, genau hier, und es versucht, bei dir anzukommen.",
@@ -103,9 +126,11 @@ export const VARIANTS: readonly VariantDef[] = [
     "Mitten im Raum steht jemand, der nicht mehr weiß, wohin mit den Händen, mit dem Satz, mit dem Körper. Er wartet auf ein Zeichen, das einmal nicht kam — und wartet es bis heute nach.",
     "Das war Erstarrung — in einer anderen Maske. Stillgestanden ist kein Versagen. Es ist ein Körper, der einmal die richtige Antwort auf eine falsche Zeit gefunden hat. Die Zeit hat sich geändert. Er darf gehen."),
   v("panzerglas", ERSTARUNG, "Das Panzerglas", "Hält, was Eis nicht hält", 220, 1.35,
-    "Zwischen dir und allem anderen steht eine Scheibe, härter als Glas, kälter als Eis. Nichts kommt durch — auch das Gute nicht. Die Scheibe hat einmal einen Sturm ausgehalten, der niemand sonst gesehen hat.",
+    "Zwischen dir und allem anderen steht eine Scheibe, härter als Glas, kälter als Eis. Nichts kommt durch — auch das Gute nicht. Die Scheibe hat einmal einen Sturm ausgehalten, den niemand sonst gesehen hat.",
     "Das war Erstarrung — in einer anderen Maske. Das Panzerglas war nie Kälte. Es war Architektur: das stabilste, was du in einer Nacht bauen konntest. Nachts sind alle Mauern erlaubt. Aber es wird Tag."),
 ];
+
+export const VARIANTS: readonly VariantDef[] = [...QUALITY_12, ...MASK_TUPLES.map((t) => m(...t))];
 
 export const VARIANT_BY_ID: ReadonlyMap<string, VariantDef> = new Map(VARIANTS.map((x) => [x.id, x]));
 
@@ -161,22 +186,50 @@ export interface VariantSpawn {
   variant: VariantDef;
   /** Wo die Maske heute schwirrt: Heimat-Knoten oder Drift-Ziel. */
   hostNodeId: string;
-  /** Gastgeber-Insel des Beach-Points (immer eine erreichbare Hauptstadt). */
-  islandId: string;
+  /** Gastgeber-Insel (Strand-Spawn) oder null (Meer-Spawn). */
+  islandId: string | null;
   x: number;
   z: number;
   y: number;
   drifted: boolean;
+  /** true = Meer-Spawn (begegnbar vom Schiff), false = Strand (zu Fuß). */
+  water: boolean;
+}
+
+// Pro Kontinent die Legacy-Hauptstädte, an deren Stränden Masken
+// landen dürfen. Kontinente ohne Hauptstadt (Körper, Bindung, Wut)
+// schwirren komplett auf dem Meer — der Graph wird auf Segeltörn
+// fühlbar, bevor er betreten ist.
+const CLUSTER_HOSTS: Record<string, string[]> = {
+  alarm: ["hypervigilanz", "herzrasen"],
+  glas: ["dissoziation", "erstarrung"],
+  scham: ["scham", "leere"],
+  misstrauen: ["misstrauen", "naehe"],
+  wiederkehr: ["flashback", "albtraum"],
+  koerper: [],
+  bindung: [],
+  wut: [],
+  muedigkeit: ["vermeidung", "verdraengung"],
+  auge: [],
+};
+
+/** Heimat-Gastgeber eines Knotens: die Insel seiner Stadt, sonst null (Meer). */
+function homeHostId(variantId: string, node: PhenomenonNode): string | null {
+  if (node.legacy && node.id !== "sturmherd") return node.id;
+  const hosts = CLUSTER_HOSTS[node.cluster] ?? [];
+  if (hosts.length === 0) return null;
+  return hosts[mix(`${variantId}|heimat`) % hosts.length];
 }
 
 /**
  * Drift-Ziel einer Maske an einem Tag: deterministisch gewählter
- * Legacy-Nachbar (Hauptstadt → begegnbar). Gibt null zurück, wenn es
- * keinen Legacy-Nachbarn gibt — dann bleibt die Maske zu Hause.
+ * Nachbar (das Auge ausgenommen — es ist die Mitte, kein Ufer).
+ * Nicht-Legacy-Ziele sind erlaubt: Die Maske schwimmt dann im Meer
+ * vor dem Kontinent und ist vom Schiff aus zu begegnen.
  */
 function driftTarget(variantId: string, dateIso: string, nodeId: string): string | null {
   const nbs = [...(neighborIndex.get(nodeId) ?? [])]
-    .filter((n) => NODE_BY_ID.get(n)?.legacy)
+    .filter((n) => n !== "sturmherd" && NODE_BY_ID.has(n))
     .sort();
   if (nbs.length === 0) return null;
   return nbs[mix(`${dateIso}|${variantId}|ziel`) % nbs.length];
@@ -198,12 +251,27 @@ function maskBeachPoint(variantId: string, dateIso: string, islandId: string): {
   return { x: isl.x, y: terrainHeight(isl.x, isl.z + isl.radius * 0.3), z: isl.z + isl.radius * 0.3 };
 }
 
+/** Deterministischer Meerpunkt vor einem Knoten (offenes Wasser). */
+function maskSeaPoint(variantId: string, dateIso: string, node: PhenomenonNode): { x: number; z: number; y: number } {
+  const rng = mulberry32(hashId(`${dateIso}|${variantId}|meer`));
+  let x = node.x;
+  let z = node.z;
+  for (let tries = 0; tries < 60; tries++) {
+    const a = rng() * Math.PI * 2;
+    const r = 60 + rng() * 110;
+    x = node.x + Math.cos(a) * r;
+    z = node.z + Math.sin(a) * r;
+    if (terrainHeight(x, z) < -1.2) break;
+  }
+  return { x: Math.round(x), y: 1.0, z: Math.round(z) };
+}
+
 /**
  * Welche Masken schwirren heute wo? Reine Funktion von Datum + Stand.
  *  · Masken begriffener Knoten tauchen nicht auf (durchschaut, im Register).
  *  · Begriffene Masken tauchen nicht auf (sie sind im Register).
- *  · ~1/4 der Masken driftet an einem Tag zu einem Hauptstadt-Nachbarn.
- *  · Nichts verfällt: Die Rotation wiederholt sich, alles kommt wieder.
+ *  · ~1/5 der Masken pausiert pro Tag (Ruhetag) — nie verfallen, immer wieder da.
+ *  · ~1/4 der anwesenden Masken driftet an einem Tag zu einem Nachbarn.
  */
 export function todaysVariants(dateIso: string, p: GraphProgress, vp: VariantProgress): VariantSpawn[] {
   const spawns: VariantSpawn[] = [];
@@ -211,20 +279,48 @@ export function todaysVariants(dateIso: string, p: GraphProgress, vp: VariantPro
   for (const x of VARIANTS) {
     if (p.understood.includes(x.nodeId)) continue; // Kern durchschaut → alle Masken begriffen
     if (vp.variantsUnderstood.includes(x.id)) continue;
-    const h = mix(`${dateIso}|${x.id}|${seed}`);
-    // Ruhetag: ~1/5 der Masken pausiert pro Tag — nie verfallen, immer wieder da.
     if (mix(`${dateIso}|${x.id}|ruhe|${seed}`) % 5 === 0) continue;
-    const drifted = x.spawnRules.drift && h % 4 === 0;
-    const hostNodeId = drifted ? (driftTarget(x.id, dateIso, x.nodeId) ?? x.nodeId) : x.nodeId;
-    const host = NODE_BY_ID.get(hostNodeId);
-    if (!host || !host.legacy) continue; // Sicherheit: nur auf Hauptstadtinseln spawnen
-    const pt = maskBeachPoint(x.id, dateIso, host.id);
-    spawns.push({ variant: x, hostNodeId, islandId: host.id, ...pt, drifted });
+    const node = NODE_BY_ID.get(x.nodeId);
+    if (!node) continue;
+    const drifted = x.spawnRules.drift && mix(`${dateIso}|${x.id}|${seed}`) % 4 === 0;
+    let hostId = drifted ? driftTarget(x.id, dateIso, x.nodeId) : null;
+    if (!hostId) hostId = homeHostId(x.id, node);
+    if (!hostId) {
+      // Meer-Heimat: Die Maske schwimmt vor ihrem eigenen Kontinent.
+      const pt = maskSeaPoint(x.id, dateIso, node);
+      spawns.push({ variant: x, hostNodeId: node.id, islandId: null, ...pt, drifted: false, water: true });
+      continue;
+    }
+    const host = NODE_BY_ID.get(hostId);
+    if (!host) continue;
+    if (host.legacy && host.id !== "sturmherd") {
+      const pt = maskBeachPoint(x.id, dateIso, host.id);
+      spawns.push({ variant: x, hostNodeId: host.id, islandId: host.id, ...pt, drifted, water: false });
+    } else {
+      const pt = maskSeaPoint(x.id, dateIso, host);
+      spawns.push({ variant: x, hostNodeId: host.id, islandId: null, ...pt, drifted, water: true });
+    }
   }
   return spawns;
 }
 
-/** Anzahl der Masken pro Tag (QA: „Dutzende" skaliert später mit dem Katalog). */
+/** QA: Liegt der Spawn im Wasser (Meer-Maske) oder am Strand? */
+export function spawnTerrain(spawn: VariantSpawn): number {
+  return terrainHeight(spawn.x, spawn.z);
+}
+
+/** Anzahl der Masken pro Tag (QA). */
 export function variantsPerDay(dateIso: string, p: GraphProgress, vp: VariantProgress): number {
   return todaysVariants(dateIso, p, vp).length;
 }
+
+// ─── Hash-Helfer ───────────────────────────────────────────────────
+
+/** Hash mit hoch-Bit-Avalanche (FNV-Niederwertbits sind für ähnliche Strings zu schwach). */
+function mix(s: string): number {
+  const raw = hashId(s);
+  return (raw ^ (raw >>> 16)) >>> 0;
+}
+
+// Für QA: Nachbarschafts-Index, Knoten-Lookup + Graph durchreichen.
+export { neighborIndex, NODE_BY_ID, GRAPH_NODES };

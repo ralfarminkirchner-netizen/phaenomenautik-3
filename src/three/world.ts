@@ -92,6 +92,24 @@ export class GameWorld {
   private wisps!: Wisps; // Strandläufer (M4) & Masken (M4.2)
   private gameDate = ""; // ISO-Datum der laufenden Tages-Rotation
   private lastDateCheck = 0; // Throttle für den Tageswechsel-Check
+  private maskSyncAt = 0; // Throttle für das Nachladen naher Masken
+
+  /** M4.2 (Vollkatalog): Tagesliste neu berechnen (Datum, Begreifen, Rotation). */
+  private refreshMasks() {
+    this.wisps.setVariantDay(todaysVariants(this.gameDate, this.save.graph, this.save));
+  }
+
+  /** M4.2 (Vollkatalog): Nahe Masken rendern, ferne aus der Welt nehmen (Performance). */
+  private syncMasks(t: number) {
+    if (t - this.maskSyncAt < 2) return;
+    this.maskSyncAt = t;
+    const sailing = this.save.mode === "sailing";
+    const fx = sailing ? this.ship.x : this.player.pos.x;
+    const fz = sailing ? this.ship.z : this.player.pos.z;
+    const R = 650;
+    const near = this.wisps.todaysVariantSpawns.filter((s) => (s.x - fx) ** 2 + (s.z - fz) ** 2 <= R * R);
+    this.wisps.syncVariantSpawns(near);
+  }
   private echoOrb: THREE.Mesh | null = null;
   private loot!: Loot;
   private structures!: Structures;
@@ -176,7 +194,7 @@ export class GameWorld {
 
     // Masken des Tages (M4.2): Tages-Rotation, deterministisch, kein FOMO
     this.gameDate = todayIso();
-    this.wisps.spawnVariants(todaysVariants(this.gameDate, this.save.graph, this.save));
+    this.refreshMasks();
 
     // Sammelbare Materialien + gebaute Strukturen
     this.loot = new Loot(this.scene, save.lootTaken);
@@ -381,6 +399,17 @@ export class GameWorld {
     this.currentPrompt = null;
     if (this.uiLock) return;
     if (this.save.mode === "sailing") {
+      // Maske am Schiff (M4.2, Vollkatalog): Meer-Masken sind vom Wasser aus zu begreifen
+      const seaMask = this.wisps.nearestVariant(this.ship.x, this.ship.z, 26);
+      if (seaMask && seaMask.kind === "variant") {
+        const x = seaMask.spawn.variant;
+        this.currentPrompt = {
+          key: "E",
+          text: `Eine Maske treibt am Schiff: ${x.maskName} — ${x.epithet}${seaMask.spawn.drifted ? " · fern von zu Hause" : ""}`,
+          action: () => this.openVariantEncounter(x.id),
+        };
+        return;
+      }
       // Anlegen möglich?
       const depth = terrainHeight(this.ship.x, this.ship.z);
       if (depth > -5.5 && Math.abs(this.ship.speed) < 6) {
@@ -959,6 +988,7 @@ export class GameWorld {
         const names = masks.map((m) => m.maskName).slice(0, 3).join(", ");
         store.toast(`Du durchschaust die Maske${masks.length > 1 ? "n" : ""} sofort: ${names}${masks.length > 3 ? " …" : ""}`, "info");
         for (const m of masks) this.wisps.dissolveVariant(m.id, this.particles);
+        this.refreshMasks();
       }
     }
     store.set({ encounterId: null });
@@ -991,6 +1021,7 @@ export class GameWorld {
       store.toast(v.begreifen, "good");
       audio.understand();
       this.wisps.dissolveVariant(variantId, this.particles);
+      this.refreshMasks();
     }
     store.set({ variantId: null });
     this.persist();
@@ -1301,9 +1332,23 @@ export class GameWorld {
     return fogStateOf(nodeId, this.save.graph);
   }
 
-  /** QA-Hook (M4.2): aktive Masken des Tages mit Positionen */
+  /** QA-Hook (M4.2): aktive Masken in Render-Nähe */
   get variantList(): { variantId: string; maskName: string; nodeId: string; islandId: string; x: number; z: number; drifted: boolean }[] {
     return this.wisps.variantList();
+  }
+
+  /** QA-Hook (M4.2): die volle Tagesliste aller Masken (unabhängig von der Nähe) */
+  get todaysMasks(): { variantId: string; maskName: string; nodeId: string; islandId: string | null; x: number; z: number; drifted: boolean; water: boolean }[] {
+    return this.wisps.todaysVariantSpawns.map((s) => ({
+      variantId: s.variant.id,
+      maskName: s.variant.maskName,
+      nodeId: s.variant.nodeId,
+      islandId: s.islandId,
+      x: s.x,
+      z: s.z,
+      drifted: s.drifted,
+      water: s.water,
+    }));
   }
 
   /** QA-Hook (M4.2): Datum der laufenden Tages-Rotation */
@@ -1558,10 +1603,11 @@ export class GameWorld {
       const d = todayIso();
       if (d !== this.gameDate) {
         this.gameDate = d;
-        this.wisps.spawnVariants(todaysVariants(d, this.save.graph, this.save));
+        this.refreshMasks();
         store.toast("Ein neuer Tag — neue Masken schwirren an den Stränden. Was du verpasst, kommt wieder.", "info");
       }
     }
+    this.syncMasks(t);
     this.wisps.update(t, focus);
 
     // Echo-Orb schwebt
