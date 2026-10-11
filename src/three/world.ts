@@ -36,7 +36,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 import { createFixedStepper } from "../game/fixedStep";
-import { ROOMS, ensureOpenWorld, stepOpenWorld, sampleFields, applyWorldAction, addObservation, reviseObservation, type RoomId } from "../game/openWorld";
+import { ROOMS, ensureOpenWorld, stepOpenWorld, sampleFields, applyWorldAction, addObservation, reviseObservation, syncNpcMemory, type RoomId } from "../game/openWorld";
 import { PhenomenonRooms } from "./phenomenonRooms";
 import { NODE_BY_ID } from "../game/phenomenaGraph";
 
@@ -495,6 +495,12 @@ export class GameWorld {
     if (this.uiLock) return;
     if (e.target instanceof Element && e.target.closest("input,textarea,select,[contenteditable=true],button")) return;
     this.keys.add(k);
+    // Werkzeugwahl: 1 Axt, 2 Schaufel, 3 Enterhaken
+    if (k === "1" || k === "2" || k === "3") {
+      const tool = k === "1" ? "axe" : k === "2" ? "shovel" : "hook";
+      store.set({ tool });
+      store.toast(tool === "axe" ? "🪓 Axt bereit — Bäume fällen mit Klick oder E" : tool === "shovel" ? "🥄 Schaufel bereit — Klick gräbt den Boden um" : "🪝 Enterhaken bereit — Klick wirft, erneuter Klick lässt los", "info");
+    }
     if (k === "e") this.tryInteract();
     if (k === "q") this.tryDodge();
     if (k === "m") {
@@ -543,8 +549,182 @@ export class GameWorld {
       audio.startSea();
       return;
     }
-    if (e.button === 0 && this.save.mode === "onfoot") this.tryAttack();
+    if (e.button === 0 && this.save.mode === "onfoot") this.useTool();
   };
+
+  /** Klick benutzt das gewählte Werkzeug (1 Axt · 2 Schaufel · 3 Enterhaken). */
+  private useTool() {
+    if (this.uiLock || this.save.mode !== "onfoot") return;
+    const tool = store.get().tool;
+    if (tool === "hook") {
+      this.useHook();
+      return;
+    }
+    if (tool === "shovel") {
+      this.dig();
+      return;
+    }
+    // Axt: ein Baum in Reichweite geht immer — Kampf bleibt Opt-in.
+    const tree = this.props.nearestTree(this.player.pos.x, this.player.pos.z, 3.4);
+    if (tree && this.attackCooldown <= 0) {
+      this.attackCooldown = 0.5;
+      this.chop(tree);
+      return;
+    }
+    this.tryAttack();
+  }
+
+  // ── Schaufel ──────────────────────────────────────────────────────
+  private dugSpots = new Map<string, number>(); // Rasterzelle → Zeitpunkt
+
+  private dig() {
+    if (this.attackCooldown > 0 || !this.player.grounded || this.player.climbing) return;
+    const p = this.player.pos;
+    const g = this.groundAt(p.x, p.z);
+    if (g < 0.15) { store.toast("Hier ist nur Wasser — die Schaufel braucht festen Boden.", "info"); return; }
+    const cell = `${Math.round(p.x / 3)}:${Math.round(p.z / 3)}`;
+    const last = this.dugSpots.get(cell) ?? -1e9;
+    if (this.elapsed - last < 90) { store.toast("Diese Stelle ist frisch umgegraben. Ein Stück weiter lohnt sich eher.", "info"); return; }
+    this.attackCooldown = 0.65;
+    this.dugSpots.set(cell, this.elapsed);
+    this.player.swing();
+    audio.hit();
+    const fx = Math.sin(this.player.facing), fz = Math.cos(this.player.facing);
+    const hx = p.x + fx * 1.2, hz = p.z + fz * 1.2;
+    const hy = this.groundAt(hx, hz);
+    this.particles.burst(14, {
+      x: hx, y: hy + 0.25, z: hz, spread: 0.8,
+      vy: 2.2, life: 0.7, size: 1.5, color: [0.45, 0.36, 0.24], gravity: 6, drag: 0.92,
+    });
+    // Strandfund am Wasserlinien-Sand, sonst gewöhnlicher Boden
+    const beach = g < 1.6;
+    const roll = Math.random();
+    window.setTimeout(() => {
+      if (this.disposed) return;
+      if (roll < (beach ? 0.5 : 0.3)) {
+        this.save.wood += 1; this.save.driftwood += 1;
+        store.toast(beach ? "+1 Treibholz — vergraben im Sand." : "+1 brauchbares Stück Holz.", "good");
+        audio.confirm();
+      } else if (roll < (beach ? 0.62 : 0.42)) {
+        this.save.crystals += 1;
+        store.toast("+1 Kristall — etwas hat im Boden geschimmert.", "good");
+        audio.understand();
+      } else if (roll < 0.8) {
+        store.toast("Steine und Wurzeln. Nichts Brauchbares.", "info");
+      } else {
+        store.toast("Nur lockere Erde.", "info");
+      }
+      this.persist();
+    }, 320);
+  }
+
+  // ── Enterhaken ────────────────────────────────────────────────────
+  private hook: {
+    state: "idle" | "flying" | "attached";
+    point: THREE.Vector3;
+    vel: THREE.Vector3;
+    line: THREE.Line | null;
+    head: THREE.Mesh | null;
+  } = { state: "idle", point: new THREE.Vector3(), vel: new THREE.Vector3(), line: null, head: null };
+
+  private useHook() {
+    if (this.hook.state !== "idle") { this.releaseHook(true); return; }
+    if (this.attackCooldown > 0) return;
+    this.attackCooldown = 0.4;
+    // Wurf entlang der Kamera: Zielpunkt per Höhenmarsch gegen das Terrain
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);
+    if (dir.y < 0.12) dir.y = 0.35; // etwas nach oben werfen, damit der Haken fasst
+    dir.normalize();
+    const from = new THREE.Vector3(this.player.pos.x, this.player.pos.y + 1.5, this.player.pos.z);
+    let hit: THREE.Vector3 | null = null;
+    for (let s = 3; s < 30; s += 0.8) {
+      const x = from.x + dir.x * s, z = from.z + dir.z * s;
+      const y = from.y + dir.y * s + s * 0.12; // leichter Bogen nach oben
+      if (terrainHeight(x, z) > y - 0.6) { hit = new THREE.Vector3(x, Math.max(terrainHeight(x, z), y), z); break; }
+      const tree = this.props.nearestTree(x, z, 1.6);
+      if (tree && tree.state === "standing") { hit = new THREE.Vector3(x, y, z); break; }
+    }
+    if (!hit) {
+      store.toast("Der Enterhaken findet keinen Halt — ziele auf einen Hang, Felsen oder Baum.", "info");
+      audio.cancel();
+      return;
+    }
+    this.hook.state = "flying";
+    this.hook.point.copy(hit);
+    this.hook.vel.set(0, 0, 0);
+    this.ensureHookVisuals();
+    this.player.swing();
+    audio.select();
+    store.toast("🪝 Der Haken sitzt! Halt dich fest — erneuter Klick lässt los.", "good");
+  }
+
+  private ensureHookVisuals() {
+    if (!this.hook.line) {
+      const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+      this.hook.line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x8a6f4d }));
+      this.hook.line.frustumCulled = false;
+      this.scene.add(this.hook.line);
+      const headGeo = new THREE.ConeGeometry(0.16, 0.5, 6);
+      headGeo.rotateX(Math.PI / 2);
+      this.hook.head = new THREE.Mesh(headGeo, new THREE.MeshStandardMaterial({ color: 0x5a6068, roughness: 0.5, metalness: 0.7 }));
+      this.scene.add(this.hook.head);
+    }
+    this.hook.line.visible = true;
+    this.hook.head!.visible = true;
+  }
+
+  private releaseHook(launch: boolean) {
+    if (this.hook.state === "idle") return;
+    this.hook.state = "idle";
+    if (this.hook.line) this.hook.line.visible = false;
+    if (this.hook.head) this.hook.head.visible = false;
+    if (launch && !this.player.grounded) {
+      // Loslassen in der Luft: Schwung mitnehmen — danach trägt der Wind
+      // (s. Gleiten: Böen geben Auftrieb und Schub).
+      this.player.vel.y = Math.max(this.player.vel.y, 3.4);
+      this.player.hookGlide = true;
+    }
+  }
+
+  /** Zug-Kraft während „attached“: zieht die Figur zum Hakenpunkt. */
+  private updateHook(dt: number) {
+    if (this.hook.state === "idle") return;
+    const p = this.player.pos;
+    if (this.hook.state === "flying") {
+      this.hook.state = "attached";
+      audio.hit();
+    }
+    if (this.hook.state === "attached") {
+      const dx = this.hook.point.x - p.x;
+      const dy = this.hook.point.y - (p.y + 1.2);
+      const dz = this.hook.point.z - p.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d < 1.6) {
+        // Angekommen: auf dem Punkt abstellen
+        const g = this.groundAt(this.hook.point.x, this.hook.point.z);
+        if (g > this.hook.point.y - 2.5) { p.y = Math.max(p.y, g); this.player.grounded = true; }
+        this.releaseHook(false);
+        return;
+      }
+      const pull = Math.min(26, 10 + d * 1.4);
+      this.player.vel.x += (dx / d) * pull * dt * 3.2;
+      this.player.vel.y += (dy / d) * pull * dt * 3.2 + 14 * dt; // Seil trägt gegen die Schwerkraft
+      this.player.vel.z += (dz / d) * pull * dt * 3.2;
+      const sp = this.player.vel.length();
+      if (sp > 22) this.player.vel.multiplyScalar(22 / sp);
+      this.player.grounded = false;
+    }
+    // Seil zeichnen
+    if (this.hook.line && this.hook.head) {
+      const pos = this.hook.line.geometry.attributes.position as THREE.BufferAttribute;
+      pos.setXYZ(0, p.x, p.y + 1.3, p.z);
+      pos.setXYZ(1, this.hook.point.x, this.hook.point.y, this.hook.point.z);
+      pos.needsUpdate = true;
+      this.hook.head.position.copy(this.hook.point);
+      this.hook.head.lookAt(p.x, p.y + 1.3, p.z);
+    }
+  }
 
   private onWheel = (e: WheelEvent) => {
     if (this.uiLock || e.target !== this.renderer.domElement) return;
@@ -1458,7 +1638,7 @@ export class GameWorld {
     const localPosition = this.save.mode === "sailing" ? this.ship : this.player.pos;
     const field = sampleFields(state, localPosition.x, localPosition.z);
     this.storm = field.storm;
-    this.water.setEnvironment(this.storm, field.tide);
+    this.water.setEnvironment(this.storm, field.tide, field.windSpeed, state.seconds);
     audio.setStormIntensity(this.storm, field.windSpeed, field.soundMask);
 
     // Fokus & Modi
@@ -1518,7 +1698,8 @@ export class GameWorld {
           pl.stamina = Math.max(0, pl.stamina - perSecond * ddt);
           return pl.stamina > 0;
         },
-      });
+      }, { windX: field.windX, windZ: field.windZ, windSpeed: field.windSpeed, gust: field.gust });
+      this.updateHook(dt);
 
       // Ausdauer-Buchhaltung: Sprint kostet, Stillstand/Gehen regeneriert
       // (Essens-Wirkung „Energie" verstärkt, Zucker-Crash schwächt die Regeneration)
@@ -1711,6 +1892,9 @@ export class GameWorld {
         targetDist: Math.round(distT),
         timeOfDay: this.save.timeOfDay,
         storm: this.storm,
+        windDeg: ((Math.atan2(field.windX, field.windZ) * 180) / Math.PI + 360) % 360,
+        windSpeed: field.windSpeed,
+        gust: field.gust,
         glutenFree: this.save.glutenFree,
         fps: Math.round(this.fpsEma),
         fireBuffUntil: this.fireBuffUntil,
@@ -1924,6 +2108,9 @@ export class GameWorld {
     if (this.uiLock) return "Die Welt ist gerade angehalten.";
     if (!action.startsWith("weather:") && !action.startsWith("time:") && this.getOpenWorldState().activeRoom !== room) return "Fahre zuerst zu diesem Ort.";
     const result = applyWorldAction(this.getOpenWorldState(), room, action);
+    // Erlebtes Hafenwissen wird Teil der vorhandenen NPC-Erinnerung
+    // (Mara/Tove, IDs „mara“/„tove“); ohne Eintrag bleibt die Person außerhalb.
+    syncNpcMemory(this.save, this.getOpenWorldState());
     this.rooms.update(this.getOpenWorldState(), this.elapsed, (x,z,t) => this.water.heightAt(x,z,t));
     store.set({ openWorldRevision: store.get().openWorldRevision + 1 });
     this.persist();

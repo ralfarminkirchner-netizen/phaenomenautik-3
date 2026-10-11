@@ -17,6 +17,7 @@ export interface HudState {
   wood: number;
   crystals: number;
   weaponLevel: number;
+  tool: "axe" | "shovel" | "hook"; // gewähltes Werkzeug (Tasten 1/2/3)
   prompt: string | null;
   promptKey: string | null; // z. B. "E"
   compassYaw: number; // Kamerablick (rad)
@@ -25,6 +26,9 @@ export interface HudState {
   targetDist: number;
   timeOfDay: number;
   storm: number; // 0..1
+  windDeg: number; // Richtung, in die der Wind weht (Grad, 0 = Norden)
+  windSpeed: number; // m/s am eigenen Ort
+  gust: number; // örtlicher Böenanteil −0.75…+0.75 (treibt auch die Wellen)
   fps: number;
   showFps: boolean;
   toasts: { id: number; text: string; kind: "info" | "good" | "bad" }[];
@@ -63,6 +67,7 @@ export const initialHud: HudState = {
   wood: 0,
   crystals: 0,
   weaponLevel: 1,
+  tool: "axe",
   prompt: null,
   promptKey: null,
   compassYaw: 0,
@@ -71,6 +76,9 @@ export const initialHud: HudState = {
   targetDist: 0,
   timeOfDay: 9.4,
   storm: 0,
+  windDeg: 0,
+  windSpeed: 0,
+  gust: 0,
   fps: 0,
   showFps: false,
   toasts: [],

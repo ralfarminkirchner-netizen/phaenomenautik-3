@@ -107,7 +107,7 @@ void main() {
   // die Plane lohnt sich nur dort, wo sie Objekte spiegelt (Schiff, Inseln).
   if (uReflOn > 0.5) {
     vec2 ruv = vRefl.xy / max(vRefl.w, 1e-4);
-    ruv += nrm.xz * 0.035;
+    ruv += nrm.xz * 0.022;
     vec2 inEdge = smoothstep(0.0, 0.14, ruv) * (1.0 - smoothstep(0.86, 1.0, ruv));
     float mask = inEdge.x * inEdge.y;
     mask *= smoothstep(750.0, 180.0, dist);
@@ -119,7 +119,12 @@ void main() {
     refl = mix(refl, planar, mask * 0.92);
   }
   // Sturm: die See streut statt zu spiegeln — Reflexion zurücknehmen
-  vec3 col = mix(waterCol, refl, min(fres * 1.15, 0.88) * (1.0 - uStorm * 0.35));
+  float reflW = min(fres * 1.15, 0.88) * (1.0 - uStorm * 0.35);
+  // Nahfeld: das Schiff und die Figur spiegeln sich auch bei steilem Blick
+  // nach unten — physikalisch bleibt Fresnel schwach, aber die Plane liefert
+  // dort genau die Objekte, die man im Spiel sehen will.
+  if (uReflOn > 0.5) reflW = max(reflW, smoothstep(70.0, 10.0, dist) * 0.34 * (1.0 - uStorm * 0.3));
+  vec3 col = mix(waterCol, refl, reflW);
 
   // Ambienter Indigo-Lift: Schattenseite kippt nie zu Plastik-Schwarz
   col += vec3(0.040, 0.062, 0.105) * (1.0 - fres) * (0.30 + uNight * 0.45 + uStorm * 0.25);
@@ -146,8 +151,10 @@ void main() {
   vec3 foamCol = vec3(0.92, 0.96, 0.98) * (1.0 - uNight * 0.75);
   col = mix(col, foamCol, foam * 0.68);
 
-  // Transparenz: Ufer lässt den Sand durchscheinen, Tiefe wird undurchsichtig
-  float alpha = mix(0.94, 0.45, shallowMix);
+  // Transparenz: Flachwasser gibt den Meeresboden deutlich frei (Sand,
+  // Kiesel, Grasstreifen), Tiefe wird undurchsichtig. Steilerer Abfall als
+  // die Farbabsorption — das Auge soll unten liegende Struktur erkennen.
+  float alpha = mix(0.96, 0.16, exp(-depth * 0.55));
   alpha = clamp(alpha + foam * 0.35 + fres * 0.3, 0.0, 0.97);
 
   // Nebel wie die Szene (linear): ferne Flächen gehen in Fog-Farbe auf und
@@ -329,6 +336,8 @@ export class Water {
       uniforms: {
         uTime: { value: 0 },
         uStormAmp: { value: 1 },
+        uGustGain: { value: 0 },
+        uGustPhase: { value: 0 },
         uTide: { value: 0 },
         uNormals: { value: makeNormalTexture(256) },
         uTerrain: { value: makeTerrainTexture(1024) },
@@ -415,7 +424,9 @@ export class Water {
     const gx = Math.round(center.x / 8) * 8;
     const gz = Math.round(center.z / 8) * 8;
     this.mesh.position.set(gx, 0, gz);
-    this.setEnvironment(storm, this.tide);
+    // Sturm/Tide hier nur auffrischen — Böen-Phase und -Verstärkung kommen
+    // aus setEnvironment (gekoppeltes Weltfeld) und bleiben erhalten.
+    this.stormAmp = 0.75 + storm * 1.5;
     const u = this.mat.uniforms;
     u.uTime.value = t;
     u.uStormAmp.value = this.stormAmp;
@@ -430,18 +441,26 @@ export class Water {
     u.uFogFar.value = fog.far;
   }
 
-  /** CPU-Wellenhöhe (Schiff, Bojen) */
+  /** CPU-Wellenhöhe (Schiff, Bojen) — identisch zum Shader inkl. Böenfeld. */
   heightAt(x: number, z: number, t: number): number {
-    return waveHeight(x, z, t, this.stormAmp) + this.tide;
+    return waveHeight(x, z, t, this.stormAmp, this.gustGain, this.gustPhase) + this.tide;
   }
 
   private tide = 0;
+  private gustGain = 0;
+  private gustPhase = 0;
 
   /** Vor Rumpf-/Bojenabtastung und Rendern denselben Zustand setzen. */
-  setEnvironment(storm: number, tide = 0) {
+  setEnvironment(storm: number, tide = 0, windSpeed = 6, worldSeconds = 0) {
     this.tide = tide;
     this.stormAmp = 0.75 + storm * 1.5;
+    // Böen-Amplifikation: bei Starkwind deutlich höhere, örtlich wandernde
+    // Wellenberge; in Ruhe nur eine leise Ortsvariation.
+    this.gustGain = clamp((windSpeed / 7 - 0.55) * 0.5, 0.06, 0.85);
+    this.gustPhase = worldSeconds / 7;
     this.mat.uniforms.uStormAmp.value = this.stormAmp;
+    this.mat.uniforms.uGustGain.value = this.gustGain;
+    this.mat.uniforms.uGustPhase.value = this.gustPhase;
     this.mat.uniforms.uTide.value = tide;
   }
 }

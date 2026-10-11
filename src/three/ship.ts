@@ -7,8 +7,11 @@ import { clamp, lerp } from "../game/noise";
 import type { ParticleSystem } from "./particles";
 import { getModel, setShadows } from "./assets";
 
-// Modell-Ausrichtung: ggf. anpassen, falls das GLB anders orientiert ist
-const MODEL_YAW = 0;
+// Modell-Ausrichtung: Im GLB zeigt der Bug Richtung +Z (Front Sail z≈+1.13,
+// BackSail z≈−1.05). Die Fahrtrichtung ist (−sin h, −cos h), also −Z bei h=0.
+// Ohne Drehung fuhr das Schiff sichtbar mit dem Heck voraus — MODEL_YAW=π
+// richtet den Bug in die tatsächliche Fahrtrichtung aus.
+const MODEL_YAW = Math.PI;
 
 export class Ship {
   group = new THREE.Group();
@@ -21,6 +24,7 @@ export class Ship {
   private hullRoll = 0;
   private wake: THREE.Mesh;
   private wakeMat: THREE.ShaderMaterial;
+  private shadowBlob: THREE.Mesh | null = null;
   moored = false;
   private sailNodes: THREE.Object3D[] = [];
   private sailAmount = 1;
@@ -38,9 +42,12 @@ export class Ship {
     model.rotation.y = MODEL_YAW;
     setShadows(model, true, false);
     this.group.add(model);
-    // Segel-Knoten für Einholen/Aussetzen (GLB-Namen: Front_Sail mit Unterstrich!)
+    // Segel-Knoten für Einholen/Aussetzen. GLB: „Front Sail“ mit Leerzeichen;
+    // je nach drei-Version wird der Name unverändert oder sanitisiert
+    // übernommen — deshalb alle drei Schreibweisen akzeptieren.
+    const SAIL_NAMES = new Set(["BackSail", "Front_Sail", "MidleSail", "Front Sail", "FrontSail"]);
     model.traverse((o) => {
-      if (["BackSail", "Front_Sail", "MidleSail"].includes(o.name)) this.sailNodes.push(o);
+      if (SAIL_NAMES.has(o.name)) this.sailNodes.push(o);
     });
 
     scene.add(this.group);
@@ -73,6 +80,31 @@ export class Ship {
     this.wake = new THREE.Mesh(wakeGeo, this.wakeMat);
     this.wake.renderOrder = 2;
     scene.add(this.wake); // Szenen-Ebene: folgt Wellen statt Schiffsbewegung
+
+    // Weicher Schatten auf dem Wasser: die Wasserfläche ist ein eigener
+    // Shader ohne Schattenempfang — ein wellenfolgender Dunkelkörper gibt
+    // dem Rumpf sichtbaren Kontakt mit der See (kostet fast nichts).
+    // Nur im Browser aufbauen: ship-fields.test.ts baut das Schiff in Node.
+    if (typeof document !== "undefined") {
+      const blobCanvas = document.createElement("canvas");
+      blobCanvas.width = blobCanvas.height = 128;
+      const bctx = blobCanvas.getContext("2d")!;
+      const grad = bctx.createRadialGradient(64, 64, 6, 64, 64, 62);
+      grad.addColorStop(0, "rgba(6, 18, 26, 0.62)");
+      grad.addColorStop(0.55, "rgba(6, 18, 26, 0.30)");
+      grad.addColorStop(1, "rgba(6, 18, 26, 0)");
+      bctx.fillStyle = grad;
+      bctx.fillRect(0, 0, 128, 128);
+      const blobTex = new THREE.CanvasTexture(blobCanvas);
+      const shadowMat = new THREE.MeshBasicMaterial({
+        map: blobTex, transparent: true, depthWrite: false, opacity: 0.9,
+      });
+      const blobGeo = new THREE.PlaneGeometry(11, 19);
+      blobGeo.rotateX(-Math.PI / 2);
+      this.shadowBlob = new THREE.Mesh(blobGeo, shadowMat);
+      this.shadowBlob.renderOrder = 3; // nach dem (transparenten) Wasser zeichnen
+      scene.add(this.shadowBlob);
+    }
   }
 
   sailDt(
@@ -82,7 +114,7 @@ export class Ship {
     speedLevel: number,
     particles: ParticleSystem,
     waveY: (x: number, z: number) => number,
-    field?: { windX: number; windZ: number; windSpeed: number; currentX: number; currentZ: number; tide: number },
+    field?: { windX: number; windZ: number; windSpeed: number; currentX: number; currentZ: number; tide: number; gust?: number },
   ): { blocked: boolean } {
     if (this.moored) {
       this.speed = 0;
@@ -93,7 +125,12 @@ export class Ship {
     // Vereinfachte Segelpolar: quer/mit dem Wind schneller, gegen ihn langsamer.
     // Ruhiges Wasser bleibt mit geringer Paddelhilfe befahrbar.
     const polar = clamp(0.58 + alignment * 0.28 + (1 - Math.abs(alignment)) * 0.25, 0.2, 1);
-    const maxSpeed = (24 + speedLevel * 5) * (input.turbo ? 1.6 : 1) * Math.max(0.15, windSpeed / 7) * polar;
+    // Böe fangen: läuft man mit dem Wind und trifft eine Bö, schiebt sie
+    // sichtbar an — dieselbe Bö wirft dort auch höhere Wellen (waves.ts).
+    const gustBoost = field?.gust !== undefined && alignment > 0.35 && field.gust > 0.3
+      ? 1 + field.gust * 0.4
+      : 1;
+    const maxSpeed = (24 + speedLevel * 5) * (input.turbo ? 1.6 : 1) * Math.max(0.15, windSpeed / 7) * polar * gustBoost;
     const accel = 14;
     const target = input.forward * maxSpeed;
     this.speed = Math.abs(this.speed - target) < accel * dt ? target : this.speed + Math.sign(target - this.speed) * accel * dt;
@@ -152,6 +189,15 @@ export class Ship {
     const wz = this.z + Math.cos(this.heading) * wBack;
     this.wake.position.set(wx, waveY(wx, wz) + 0.18, wz);
     this.wake.rotation.set(0, this.heading, 0);
+
+    // Schatten folgt dem Rumpf auf mittlerer Wellenhöhe, leicht zum Bug
+    // versetzt; bei starker See flackert er nicht, weil er die Welle nutzt.
+    if (this.shadowBlob) {
+      const sx = this.x - Math.sin(this.heading) * 1.2;
+      const sz = this.z - Math.cos(this.heading) * 1.2;
+      this.shadowBlob.position.set(sx, waveY(sx, sz) + 0.09, sz);
+      this.shadowBlob.rotation.set(0, this.heading, 0);
+    }
     if (strength > 0.45 && Math.random() < strength * 0.6) {
       particles.spawn({
         x: this.x - Math.sin(this.heading) * 8.5 + (Math.random() - 0.5) * 2.4,
@@ -171,5 +217,7 @@ export class Ship {
     this.speed = 0;
     this.group.position.set(x, 0.3, z);
     this.group.rotation.set(0, heading, 0);
+    this.shadowBlob?.position.set(x - Math.sin(heading) * 1.2, 0.12, z - Math.cos(heading) * 1.2);
+    if (this.shadowBlob) this.shadowBlob.rotation.set(0, heading, 0);
   }
 }

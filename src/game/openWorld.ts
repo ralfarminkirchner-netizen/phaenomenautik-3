@@ -6,7 +6,7 @@ export const ROOMS: { id: RoomId; name: string; x: number; z: number; arrivalX: 
   { id: "shelter", name: "Stiller Strand", x: 1150, z: 3050, arrivalX: 1290, arrivalZ: 3050, reason: "Ruhe, Abstand oder ein Gespräch suchen" },
 ];
 
-export interface KnowledgeEntry { at: number; source: "seen" | "heard"; fact: string }
+export interface KnowledgeEntry { at: number; room?: RoomId; kind?: "message" | "delivery" | "retraction" | "observation"; source: "seen" | "heard"; fact: string }
 export interface ObservationNote {
   id: string;
   room: RoomId;
@@ -98,6 +98,7 @@ export function sampleFields(s: OpenWorldState, x: number, z: number) {
     currentZ: Math.cos(x / 710 + s.seconds / 95) * flow,
     tide, storm, visibility: 1100 - storm * 680,
     soundMask: clamp(windSpeed / 23 + storm * 0.5 - shelter * 0.12, 0, 1),
+    gust, // örtlicher Böenanteil (−0.75…+0.75) — treibt auch die Wellenhöhe
   };
 }
 
@@ -115,10 +116,34 @@ export function bayOptics(s: OpenWorldState, viewpoint: OpenWorldState["bay"]["v
     reflectionAngle, viewpointAngle, requiredReflectorAngle, windJitter, referenceStable: bay.reference };
 }
 
-function witness(knowledge: KnowledgeEntry[], s: OpenWorldState, source: KnowledgeEntry["source"], fact: string) {
+function witness(knowledge: KnowledgeEntry[], s: OpenWorldState, source: KnowledgeEntry["source"], fact: string, kind: NonNullable<KnowledgeEntry["kind"]> = "observation") {
   const last = knowledge[knowledge.length - 1];
-  if (last?.fact === fact && last.source === source) return;
-  knowledge.push({ at: s.seconds, source, fact });
+  if (last?.fact === fact && last.source === source && last.kind === kind) return;
+  knowledge.push({ at: s.seconds, room: s.activeRoom ?? undefined, kind, source, fact });
+}
+/** Eine gespeicherte Kenntnis als erinnerbare Zeile: Art, Quelle, Weltzeit und Ort bleiben getrennt erhalten. */
+export function knowledgeLine(e: KnowledgeEntry): string {
+  const kind = e.kind === "message" ? "Erzählt" : e.kind === "delivery" ? "Übergabe" : e.kind === "retraction" ? "Rücknahme" : "Beobachtet";
+  const h = Math.floor(e.at / 3600), rest = e.at % 3600;
+  const stamp = `${h}:${Math.floor(rest / 60).toString().padStart(2, "0")}:${Math.floor(rest % 60).toString().padStart(2, "0")} h`;
+  const place = e.room ? roomById(e.room).name : "am Ort";
+  return `${kind} (${e.source === "heard" ? "gehört" : "gesehen"}, Weltzeit ${stamp}, ${place}): „${e.fact}“`;
+}
+// Empfängerwissen und vorhandene NPC-Erinnerung sind dasselbe Gedächtnis:
+// Mara und Tove tragen im NPC-Katalog die IDs „mara“/„tove“. Ohne Eintrag im
+// Hafenwissen bleibt die jeweilige Person außerhalb — Nichtwissen wird nicht
+// eingetragen, sondern einfach nicht gespeichert.
+export function syncNpcMemory(save: { npcMemory: Record<string, { met: boolean; topics: string[]; favors: number }> }, s: OpenWorldState): void {
+  for (const person of ["Mara", "Tove"] as const) {
+    const entries = s.harbor.knowledge[person];
+    if (!entries.length) continue;
+    const id = person.toLowerCase();
+    const mem = save.npcMemory[id] ?? { met: false, topics: [], favors: 0 };
+    mem.met = true;
+    for (const entry of entries) if (!mem.topics.includes(entry.fact)) mem.topics.push(entry.fact);
+    if (mem.topics.length > 12) mem.topics.splice(0, mem.topics.length - 12);
+    save.npcMemory[id] = mem;
+  }
 }
 function weatherName(s: OpenWorldState): string { return s.weather === "rain" ? "Regen" : s.weather === "breeze" ? "auffrischender Wind" : "ruhiges Wetter"; }
 function bayFact(s: OpenWorldState, viewpoint: OpenWorldState["bay"]["viewpoint"] = s.bay.viewpoint): string {
@@ -197,7 +222,7 @@ export function applyWorldAction(s: OpenWorldState, room: RoomId, action: string
     }
     if (action === "share-shore" || action === "share-offset") {
       const fact = `Du schilderst deinen Blick ${b.viewpoint === "shore" ? "vom Ufer" : "von der Seite"}: ${bayFact(s)}`;
-      witness(action === "share-shore" ? b.knowledge : b.offsetKnowledge, s, "heard", fact);
+      witness(action === "share-shore" ? b.knowledge : b.offsetKnowledge, s, "heard", fact, "message");
       return "Nur die angesprochene Person hat deine Schilderung gehört. Sie unterscheidet diese Aussage von ihrer eigenen Sicht.";
     }
   }
@@ -209,12 +234,14 @@ export function applyWorldAction(s: OpenWorldState, room: RoomId, action: string
       const person = action === "tell-Mara" ? "Mara" : "Tove";
       if (h.task === "none") return `${person}: „Sag mir, was du vorhast. Ich kann deine Absicht nicht erraten.“`;
       const fact = h.task === "repair" ? "Du möchtest Holz und Seil zur Ausbesserung des Stegs weitergeben." : "Du möchtest Holz als Vorrat weitergeben.";
-      witness(h.knowledge[person], s, "heard", fact);
+      witness(h.knowledge[person], s, "heard", fact, "message");
       return `${person} hat deine Absicht gehört: „${fact}“ Die andere Person war bei diesem Gespräch nicht dabei.`;
     }
     if (action === "ask-Mara" || action === "ask-Tove") {
       const person = action === "ask-Mara" ? "Mara" : "Tove", known = h.knowledge[person];
-      return known.length ? `${person}: „${known[known.length - 1].fact}“ Das ist ihre letzte eigene Beobachtung oder gehörte Aussage; deine spätere Absicht kann anders sein.` : `${person}: „Du hast mir noch keine Absicht erzählt und noch nichts übergeben.“`;
+      if (!known.length) return `${person}: „Du hast mir noch keine Absicht erzählt und noch nichts übergeben.“`;
+      const lines = known.map(knowledgeLine);
+      return `${person} erinnert sich an ${lines.length} ${lines.length === 1 ? "Ereignis" : "Ereignisse"}: ${lines.join(" ")} Das ist alles, was ${person} selbst gesehen oder von dir gehört hat — ohne Übermittlung bleibt die andere Person außerhalb.`;
     }
     if (action === "deliver") {
       if (h.task === "none" || !h.recipient) return "Wähle zuerst eine konkrete Zusammenstellung und eine Empfängerin. Du kannst auch ohne Übergabe weitersegeln.";
@@ -223,13 +250,13 @@ export function applyWorldAction(s: OpenWorldState, room: RoomId, action: string
       h.inventory.wood -= wood; h.inventory.rope -= rope; h.delivered.wood += wood; h.delivered.rope += rope;
       h.lastDelivery = { wood, rope, recipient: h.recipient, task: h.task, at: s.seconds };
       const fact = `Du hast ${wood} Holz und ${rope} Seil tatsächlich an ${h.recipient} übergeben.`;
-      witness(h.knowledge[h.recipient], s, "seen", fact);
+      witness(h.knowledge[h.recipient], s, "seen", fact, "delivery");
       return `${fact} Die Materialien liegen nun dort; deine ungesprochene Absicht wird dadurch nicht mitgeteilt.`;
     }
     if (action === "undo-delivery" && h.lastDelivery) {
       const parcel = h.lastDelivery;
       h.inventory.wood += parcel.wood; h.inventory.rope += parcel.rope; h.delivered.wood -= parcel.wood; h.delivered.rope -= parcel.rope;
-      witness(h.knowledge[parcel.recipient], s, "seen", "Die letzte Materialübergabe wurde gemeinsam zurückgenommen; das Material liegt wieder im Lager.");
+      witness(h.knowledge[parcel.recipient], s, "seen", "Die letzte Materialübergabe wurde gemeinsam zurückgenommen; das Material liegt wieder im Lager.", "retraction");
       h.lastDelivery = null;
       return "Das letzte Paket liegt wieder im Lager. Die Erinnerung an das Gespräch und die frühere Übergabe bleibt erhalten.";
     }
@@ -249,7 +276,7 @@ export function applyWorldAction(s: OpenWorldState, room: RoomId, action: string
       const comfortable = sh.path === "wide" && angleDistance(sh.seatAngle, 90) <= 45 && fields.soundMask < 0.45;
       sh.boundary = comfortable ? "conversation" : "quiet";
       const fact = comfortable ? "Die Einladung zum Gespräch wurde in dieser ruhigen Anordnung angenommen." : "Die Einladung wurde gehört; die Person möchte unter diesen Bedingungen bei ihrer Ruhe bleiben.";
-      witness(sh.knowledge, s, "heard", fact);
+      witness(sh.knowledge, s, "heard", fact, "message");
       return comfortable ? "„Ja, ich möchte jetzt mit dir sprechen. Der Abstand und die Sitzrichtung passen für mich.“" : "„Danke für die Einladung. Jetzt möchte ich ruhig bleiben.“ Eine andere Anordnung kann später passen; sie verpflichtet niemanden zum Gespräch.";
     }
     if (action === "talk") {
@@ -283,7 +310,7 @@ export function isOpenWorldState(value: unknown): value is OpenWorldState {
   const member = (v: unknown, choices: unknown[]) => choices.includes(v);
   const inventory = (v: unknown) => object(v) && bounded(v.wood, 0, 10000) && Number.isInteger(v.wood) && bounded(v.rope, 0, 10000) && Number.isInteger(v.rope);
   const timestamp = (v: unknown) => bounded(v, 0, object(value) && finite(value.seconds) ? value.seconds : 0);
-  const knowledge = (v: unknown) => Array.isArray(v) && v.every((k) => object(k) && timestamp(k.at) && member(k.source, ["seen", "heard"]) && typeof k.fact === "string");
+  const knowledge = (v: unknown) => Array.isArray(v) && v.every((k) => object(k) && timestamp(k.at) && member(k.source, ["seen", "heard"]) && typeof k.fact === "string" && (k.room === undefined || member(k.room, ["bay", "harbor", "shelter"])) && (k.kind === undefined || member(k.kind, ["message", "delivery", "retraction", "observation"])));
   if (!object(value) || !bounded(value.seconds, 0, Number.MAX_SAFE_INTEGER) || !bounded(value.dayStart, 0, 24) || !bounded(value.timeOfDay, 0, 24) || !finite(value.windAngle) || !member(value.weather, ["calm", "breeze", "rain"]) || !member(value.activeRoom, [null, "bay", "harbor", "shelter"])) return false;
   if (value.weatherOverride !== undefined && !member(value.weatherOverride, [null, "calm", "breeze", "rain"])) return false;
   if (value.camera !== undefined && (!object(value.camera) || !finite(value.camera.yaw) || !bounded(value.camera.pitch, -Math.PI, Math.PI) || !bounded(value.camera.distance, 1, 1000) || !member(value.camera.room, [null, "bay", "harbor", "shelter"]))) return false;

@@ -20,14 +20,23 @@ export const WAVES: WaveSpec[] = [
 
 const TWO_PI = Math.PI * 2;
 
-/** Wellenhöhe auf der CPU (Spiegel des Shaders). stormAmp skaliert alle Amplituden. */
-export function waveHeight(x: number, z: number, t: number, stormAmp: number): number {
+/** Böenfeld — Spiegel von sampleFields (openWorld.ts): dort gust =
+ *  sin(seconds/7 + x/430 + z/510) * 0.75. Hier derselbe Phasenverlauf, damit
+ *  sichtbar höhere Wellen genau dort entstehen, wo der Wind gerade stark ist. */
+function gustAt(x: number, z: number, phase: number): number {
+  return Math.sin(phase + x / 430 + z / 510);
+}
+
+/** Wellenhöhe auf der CPU (Spiegel des Shaders). stormAmp skaliert alle
+ *  Amplituden; gustGain/gustPhase koppeln die Höhe örtlich an die Böen. */
+export function waveHeight(x: number, z: number, t: number, stormAmp: number, gustGain = 0, gustPhase = 0): number {
+  const gust = 1 + gustGain * gustAt(x, z, gustPhase);
   let y = 0;
   for (const w of WAVES) {
     const k = TWO_PI / w.wavelength;
     const length = Math.hypot(w.dirX, w.dirZ);
     const f = k * ((w.dirX * x + w.dirZ * z) / length) - t * w.speed * k * Math.sqrt(9.81 / k) * 1.6;
-    y += w.amplitude * stormAmp * Math.sin(f);
+    y += w.amplitude * stormAmp * gust * Math.sin(f);
   }
   return y;
 }
@@ -35,12 +44,16 @@ export function waveHeight(x: number, z: number, t: number, stormAmp: number): n
 /** GLSL: Wellensumme + analytische Normalen + Kammfaktor (für Schaum) */
 export const WAVES_GLSL = /* glsl */ `
 uniform float uStormAmp;
+uniform float uGustGain;
+uniform float uGustPhase;
 
 vec3 gerstner(vec2 p, float t, out vec3 nrm, out float crest) {
   vec3 pos = vec3(p.x, 0.0, p.y);
   vec3 tang = vec3(1.0, 0.0, 0.0);
   vec3 binm = vec3(0.0, 0.0, 1.0);
   crest = 0.0;
+  // Böen-Amplifikation: gleiche Phase wie das CPU-Feld (s. waveHeight)
+  float gust = 1.0 + uGustGain * sin(uGustPhase + p.x / 430.0 + p.y / 510.0);
   ${WAVES.map(
     (w) => `{
     vec2 d = normalize(vec2(${w.dirX.toFixed(3)}, ${w.dirZ.toFixed(3)}));
@@ -51,10 +64,10 @@ vec3 gerstner(vec2 p, float t, out vec3 nrm, out float crest) {
     float sf = sin(f); float cf = cos(f);
     pos.x += q * a * d.x * cf;
     pos.z += q * a * d.y * cf;
-    pos.y += a * sf;
-    crest += sf * ${w.amplitude.toFixed(3)};
-    tang += vec3(-q * a * d.x * d.x * sf, a * d.x * k * cf, -q * a * d.x * d.y * sf);
-    binm += vec3(-q * a * d.x * d.y * sf, a * d.y * k * cf, -q * a * d.y * d.y * sf);
+    pos.y += a * sf * gust;
+    crest += sf * ${w.amplitude.toFixed(3)} * gust;
+    tang += vec3(-q * a * d.x * d.x * sf, a * d.x * k * cf * gust, -q * a * d.x * d.y * sf);
+    binm += vec3(-q * a * d.x * d.y * sf, a * d.y * k * cf * gust, -q * a * d.y * d.y * sf);
   }`,
   ).join("\n")}
   nrm = normalize(cross(binm, tang));

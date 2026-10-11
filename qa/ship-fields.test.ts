@@ -55,7 +55,7 @@ function close(actual: number, expected: number, tolerance = 1e-9, context = "")
 // the WAVES configuration or calling the CPU implementation as its own oracle.
 // This verifies phase/vertical displacement at the undeformed vertex coordinate.
 // It is not a WebGL image/float-precision or displaced-surface intersection test.
-function shaderHeight(shader: string, x: number, z: number, time: number, amplitude: number) {
+function shaderHeight(shader: string, x: number, z: number, time: number, amplitude: number, gust = 1) {
   const blocks = [...shader.matchAll(/vec2 d = normalize\(vec2\(([-\d.]+), ([-\d.]+)\)\);\s*float k = ([-\d.]+) \/ ([-\d.]+);\s*float a = ([-\d.]+) \* uStormAmp;[\s\S]*?float f = k \* dot\(d, p\) - t \* ([-\d.]+) \* k \* sqrt\(([-\d.]+) \/ k\) \* ([-\d.]+);/g)];
   assert.equal(blocks.length, 4, "all four emitted wave blocks are understood");
   return blocks.reduce((sum, match) => {
@@ -63,8 +63,15 @@ function shaderHeight(shader: string, x: number, z: number, time: number, amplit
     const length = Math.hypot(dx, dz);
     const k = circle / wavelength;
     const phase = k * (dx * x + dz * z) / length - time * speed * k * Math.sqrt(gravity / k) * multiplier;
-    return sum + a * amplitude * Math.sin(phase);
+    return sum + a * amplitude * gust * Math.sin(phase);
   }, 0);
+}
+
+// Gekoppeltes Böenfeld (s. waves.ts / openWorld.sampleFields): derselbe
+// Phasenverlauf auf CPU und im Shader, damit höhere Wellen genau dort
+// entstehen, wo der Wind gerade stark ist.
+function shaderGust(x: number, z: number, gain: number, phase: number) {
+  return 1 + gain * Math.sin(phase + x / 430 + z / 510);
 }
 
 test("CPU wave height agrees with emitted GPU phase at world coordinates and storm amplitudes", () => {
@@ -84,7 +91,20 @@ test("Water publishes the same tide and storm amplitude to CPU hull sampling and
     water.setEnvironment(storm, tide);
     close(material.uniforms.uTide.value, tide);
     close(material.uniforms.uStormAmp.value, water.stormAmp);
-    close(water.heightAt(2420, 3230, 32), shaderHeight(material.vertexShader, 2420, 3230, 32, material.uniforms.uStormAmp.value) + tide, 0.0002);
+    const gust = shaderGust(2420, 3230, material.uniforms.uGustGain.value, material.uniforms.uGustPhase.value);
+    close(water.heightAt(2420, 3230, 32), shaderHeight(material.vertexShader, 2420, 3230, 32, material.uniforms.uStormAmp.value, gust) + tide, 0.0002);
+  }
+});
+
+test("gust coupling: CPU hull sampling and the emitted shader share the same local gust field", () => {
+  const water = new Water(new THREE.Scene());
+  const material = water.mesh.material as THREE.ShaderMaterial;
+  // Starkwind erzeugt höhere Böenverstärkung, Flaute nur eine leise Ortsvariation.
+  water.setEnvironment(0.8, 0.1, 14, 49);
+  close(material.uniforms.uGustGain.value, Math.min(Math.max((14 / 7 - 0.55) * 0.5, 0.06), 0.85), 1e-9, "gain");
+  for (const [x, z, t] of [[2420, 3230, 32], [0, 0, 0], [1150, 3050, 7.5]]) {
+    const gust = shaderGust(x, z, material.uniforms.uGustGain.value, material.uniforms.uGustPhase.value);
+    close(water.heightAt(x, z, t) - 0.1, shaderHeight(material.vertexShader, x, z, t, material.uniforms.uStormAmp.value, gust), 0.0002, `gust ${x},${z} t=${t}`);
   }
 });
 
