@@ -10,6 +10,8 @@ Kimi hat den selektiven Port aus `main` (Ausgangsstand `8be9f0a`, 357 Masken/119
 
 Die menschliche Originalfundstelle zu „Teil 4“ fehlt weiterhin. Der Variantenraum ist Kimis heutiger Vorschlag, keine bestätigte Zuordnung dieses Teils; „Teil 4“ wird nicht mit M4 gleichgesetzt.
 
+Ralf hat die Unreal-Anfrage präzisiert: Dieses Projekt weiter verfeinern; für das andere vorhandene Projekt einen Prompt zur Verbindung der Konzepte schreiben. Der [Unreal-Verbindungsprompt](UNREAL-VERBINDUNGSPROMPT-2026-10-11.md) adressiert das tatsächlich geprüfte native Neuro-Atlas-Spiel, den geschützten Atlasbestand, den dokumentierten Kartenabsturz und einen befahrbaren Hafen–Flussmündung–Insel-Rundweg. Kein Unreal-Umbau wurde gestartet. Kimi wurde am 11.10. im tatsächlichen Phänomenautik-Chat zur Fertigstellung des vorhandenen Ports aktiviert; Register und persistierter Vergleich sind laufende Arbeit. Zwei zusätzliche Prüfbefunde wurden in seine Nachrichtenwarteschlange gestellt: Ressourcenfreigabe bei Maskenentfernung und Land-/Wasserfilter schon bei der Interaktionssuche. Warteschlangenzustellung ist noch kein Nachweis einer Korrektur.
+
 ## Arbeitsstand und Schutz des Bestands
 
 Die ursprüngliche Arbeitskopie `/Volumes/ThunderBolt4_2TB/Development/Projects/phaenomenautik-3` enthält zahlreiche lokale Änderungen und bleibt erhalten. Der geprüfte Szenen-, Text- und Schutzstand wurde als Ausgangspunkt gesichert; der bestehende Produktions-Build-Fix wurde zusammengeführt. Die Fortsetzung liegt im isolierten Worktree `/Volumes/ThunderBolt4_2TB/Development/Projects/phaenomenautik-3-mac-mini`, Branch `codex/open-world-mac-mini-20261010`. Remote: `https://github.com/ralfarminkirchner-netizen/phaenomenautik-3.git`.
@@ -70,20 +72,20 @@ Die beiden Prüfskripte gehören zu diesem Ausbau. Aktuelle technische und Brows
 1. **Laufender Kimi-Port**: vorhandene Masken und Knoten selektiv übernehmen, tatsächliche Begegnungen im bestehenden Atlasregister lesbar machen und Pflicht-/Freischalttexte korrigieren. Abnahme: frei gewählte Begegnung ohne Aufgabenleiter; ihre Registerspur nach Neuladen im vorhandenen Journal sichtbar. Kein paralleler Bauauftrag für dieselben Dateien.
 2. **Persistierter Journalvergleich im selben Kimi-Auftrag**: zwei historische Beobachtungen freiwillig als ähnlich/anders/widerspricht/noch offen verbinden. Abnahme: Beziehung und aktuelle/frühere Deutung bleiben nach Neuladen und Export/Import erhalten.
 3. **Sichtprüfung nach Kimi-Port**: die gemeinsame Overlaykorrektur ist mit `0f1e78a` gepusht und geprüft. Neue Vergleichs- und Maskenwege nach ihrer Integration nochmals im echten Browser abnehmen.
-4. **Quellen- und Atlasgrenzen**: Originalfundstelle zu „Teil 4“ weiter offen; echter GANZ-SEiN-Rückweg zum aktuellen Origin und ein nativer Neuroatlas-Empfängervertrag sind nicht belegt.
+4. **Quellen- und Atlasgrenzen**: Originalfundstelle zu „Teil 4“ weiter offen. Der GANZ-SEiN-Rückweg zum aktuellen Origin auf Port 4179 ist lokal im Browser mit erhaltenem Spielstand geprüft; die gezielte Korrektur im separaten Atlasbestand ist nicht Teil dieses PRs. Ein nativer Neuroatlas-Empfängervertrag ist weiterhin nicht belegt.
 5. Weiterer Umfang aus Issue #2 (Strömungs-/Resonanzbereiche, freiwilliger Kompass, längeres freies Segeln) folgt nach Abnahme des vorhandenen Ports. Der historische Gesamt-Lint-Befund wurde hier nicht neu geprüft.
 
 ## Spielstand und Atlas
 
 Der Spielstand liegt im Browser in `localStorage` unter `phaenomenautik3-save-v1`. Unter „Spielstand mitnehmen“ lässt sich die aktuelle Reise als JSON exportieren und eine ausgewählte Datei ausdrücklich laden. Vor dem Ersetzen wird der aktuelle Stand gesichert; ungültige Daten oder eine inzwischen geänderte Browserquelle blockieren das Ersetzen. Für einen Rechnerwechsel vorher exportieren und auf dem anderen Rechner importieren. Unterschiedliche Browser und Origins, insbesondere Port 4178 und 4179, haben getrennte Speicher. Git-Commits enthalten diese Spielstände nicht.
 
-Der tatsächliche Atlas-Anschluss unterstützt bisher nur Flimmerbucht. Atlas-URL: `http://127.0.0.1:4322/ganzsein?ganz=understand&encounter=flimmerbucht-r1`. Seine vorhandene Rückkehradresse ist fest auf `http://127.0.0.1:4178/?encounter=flimmerbucht-r1` gesetzt. Dieser Worktree läuft auf 4179; ein vollständiger Hin- und Rückweg zum aktuellen Worktree ist deshalb noch nicht belegt. Kein automatischer Austausch von Weltzuständen, Hafen-/Strandnotizen oder Atlas-Anliegen. Siehe [ATLAS-ANSCHLUSS.md](ATLAS-ANSCHLUSS.md).
+Der tatsächliche Atlas-Anschluss unterstützt bisher nur Flimmerbucht. Atlas-URL: `http://127.0.0.1:4322/ganzsein?ganz=understand&encounter=flimmerbucht-r1`. Die feste Rückkehradresse wurde in der vorhandenen Atlasquelle und im ausgelieferten Bundle gezielt auf `http://127.0.0.1:4179/?encounter=flimmerbucht-r1` korrigiert. Der Hin- und Rückweg wurde im Browser mit erhaltenem importierten Journal, NPC-Wissen, Materialien und Stegreparatur geprüft. Die Atlasänderung ist lokal gesichert und gehört nicht zu diesem Repository-Push. Kein automatischer Austausch von Weltzuständen, Hafen-/Strandnotizen oder Atlas-Anliegen. Siehe [ATLAS-ANSCHLUSS.md](ATLAS-ANSCHLUSS.md).
 
 ## Nächste konkrete Schritte
 
 1. Laufenden Kimi-Port abschließen, gezielt prüfen und über den bestehenden PR-Weg zusammenführen. Der gemeinsame Overlay-Fix ist bereits gepusht. Uncommittete Arbeit vor jedem neuen Auftrag prüfen und erhalten.
 2. Im Browser Overlaylage, frei wählbare Masken, Registerspur und persistierten Journalvergleich samt Reload/Export/Import prüfen; technische Tests ersetzen diese Sichtprüfung nicht.
-3. Erst danach weitere Räume und längeres freies Segeln prüfen. Den wirklichen Atlas-Rückweg separat mit dem Atlas-Projekt koordinieren, ohne einen allgemeinen Vertrag vorzutäuschen. Menschliche Gestaltungs- und Klangabnahme bleiben eigene Schritte.
+3. Erst danach weitere Räume und längeres freies Segeln prüfen. Der lokale Atlas-Rückweg ist korrigiert und geprüft; seine Übernahme im getrennten Atlas-Projekt muss die dortige fremde Arbeit erhalten. Menschliche Gestaltungs- und Klangabnahme bleiben eigene Schritte.
 
 Bei jedem Rechnerwechsel diese Datei aktualisieren. Zuerst `git status`, Branch, Remote und lokale Änderungen prüfen. Zusammengehörige eigene Änderungen gezielt committen und pushen; auf dem anderen Mac erst nach Bestandsprüfung übernehmen. Bei gleichzeitiger Arbeit getrennte Branches und Pull Requests verwenden. Kein blindes Pull, automatisches Stash, Reset, pauschales `git add -A`, Force-Push oder Umschreiben gemeinsamer Historie.
 

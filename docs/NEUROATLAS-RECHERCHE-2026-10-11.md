@@ -26,7 +26,7 @@ Beim **nativen Neuroatlas** ist `data/neuro-atlas/encounters/transition-packages
 
 **Korpusnachweis:** Phänomen `phenomenon:initiation:planning`; Claim `claim:e39ecd9395adce8012e3` ist die automatische Themenzuordnung Planung. Span `source-span:17784806:3272a82d5a8ed586`, Quelle `source:pmid:17784806`, Locator „Titel und Abstractanfang“.
 
-**Primärbefund:** Young und Kollegen verglichen 26 Erwachsene mit ADHS und 27 Kontrollpersonen in einer computergestützten Tower-of-London-Aufgabe. Bei zunehmender Schwierigkeit zeigte die ADHS-Gruppe geringere Genauigkeit und verlängerte ihre Vorplanungszeit weniger. [Primärpublikation: Young et al., 2007](https://pubmed.ncbi.nlm.nih.gov/17784806/).
+**Primärbefund:** Young und Kollegen verglichen 26 Erwachsene mit ADHS und 27 Kontrollpersonen in einer computergestützten Tower-of-London-Aufgabe. Die Vorplanungszeit der Kontrollgruppe nahm mit der Schwierigkeit systematisch zu; in der ADHS-Gruppe nahm sie nicht zu, während bei den schwierigsten Aufgaben die Genauigkeit sank. Am 11.10. anhand des Primärabstracts präzisiert. [Primärpublikation: Young et al., 2007](https://pubmed.ncbi.nlm.nih.gov/17784806/).
 
 **Aussagegrenze:** Diese kleine, spezifische Laborstudie beschreibt keine freie Segel- oder Gestaltungswelt. Ein reparierter Steg, ein abgebrochener Auftrag oder gesammeltes Holz ergeben keinen Wert für Exekutivfunktionen. NPC-Wissen muss weiterhin durch tatsächlich beobachtete oder mitgeteilte Vorgänge entstehen, nicht durch diese Forschungszuordnung.
 
