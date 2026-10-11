@@ -23,7 +23,8 @@ function WindVane({ yaw, windDeg, windSpeed, gust }: { yaw: number; windDeg: num
   let rel = (windDeg * Math.PI) / 180 - -heading;
   while (rel > Math.PI) rel -= Math.PI * 2;
   while (rel < -Math.PI) rel += Math.PI * 2;
-  const deg = (rel * 180) / Math.PI;
+  // Das Zeichen zeigt nach rechts; Wind vor uns gehört nach oben.
+  const deg = (rel * 180) / Math.PI - 90;
   const strong = gust > 0.45;
   return (
     <div

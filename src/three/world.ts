@@ -687,6 +687,13 @@ export class GameWorld {
     }
   }
 
+  /** Orts-/Moduswechsel beenden Zug, Seil und mitgenommenen Schwung. */
+  private clearHook() {
+    this.releaseHook(false);
+    this.player.hookGlide = false;
+    this.player.gliding = false;
+  }
+
   /** Zug-Kraft während „attached“: zieht die Figur zum Hakenpunkt. */
   private updateHook(dt: number) {
     if (this.hook.state === "idle") return;
@@ -1091,6 +1098,7 @@ export class GameWorld {
 
   // ── Moduswechsel ─────────────────────────────────────────────────
   private disembark() {
+    this.clearHook();
     // Strandpunkt in Richtung Inselmitte suchen
     const isl = islandAt(this.ship.x, this.ship.z) ?? this.nearestIslandDef(this.ship.x, this.ship.z);
     let bx = this.ship.x;
@@ -1123,6 +1131,7 @@ export class GameWorld {
   }
 
   private board() {
+    this.clearHook();
     this.save.mode = "sailing";
     this.save.playerPos = null;
     this.player.group.visible = false;
@@ -1164,6 +1173,7 @@ export class GameWorld {
   }
 
   respawn() {
+    this.clearHook();
     // nächstes entzündetes Feuer zum Todesort/Echo (Souls-Regel: dicht), sonst Hafen
     let f = this.props.fireById("feuer_harbor")!;
     let bd = Infinity;
@@ -1871,7 +1881,9 @@ export class GameWorld {
     this.hudTimer += dt;
     if (this.hudTimer > 0.1) {
       this.hudTimer = 0;
-      const camYaw = sailing ? this.sailYaw : this.player.camYaw;
+      // Tatsächlicher Blick, einschließlich Ortswinkel und Kameraglättung.
+      const look = this.camera.getWorldDirection(new THREE.Vector3());
+      const camYaw = Math.atan2(-look.x, -look.z);
       const bearing = Math.atan2(target.x - focus.x, -(target.z - focus.z));
       store.set({
         stability: this.save.player.stability,
@@ -1892,7 +1904,7 @@ export class GameWorld {
         targetDist: Math.round(distT),
         timeOfDay: this.save.timeOfDay,
         storm: this.storm,
-        windDeg: ((Math.atan2(field.windX, field.windZ) * 180) / Math.PI + 360) % 360,
+        windDeg: ((Math.atan2(field.windX, -field.windZ) * 180) / Math.PI + 360) % 360,
         windSpeed: field.windSpeed,
         gust: field.gust,
         glutenFree: this.save.glutenFree,
@@ -2091,6 +2103,7 @@ export class GameWorld {
     if (this.uiLock) return;
     const room = ROOMS.find(r => r.id === id);
     if (!room) return;
+    this.clearHook();
     this.save.mode = "sailing";
     this.player.group.visible = false;
     this.ship.moored = true;
@@ -2126,7 +2139,8 @@ export class GameWorld {
   }
 
   reviseObservation(id: string, text: string): void {
-    if (this.uiLock) return;
+    // Das geöffnete Journal hält die Bewegung an, bleibt aber bearbeitbar.
+    if (this.disposed || this.presentation !== null || store.get().dead) return;
     reviseObservation(this.getOpenWorldState(), id, text);
     this.persist();
     store.set({ openWorldRevision: store.get().openWorldRevision + 1 });

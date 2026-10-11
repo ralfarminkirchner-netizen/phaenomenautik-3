@@ -131,6 +131,8 @@ export class Player {
     this.camYaw = facing + Math.PI;
     this.grounded = true;
     this.climbing = null;
+    this.hookGlide = false;
+    this.gliding = false;
   }
 
   /** Loslassen von der Wand (kleiner Abstoß optional) */
@@ -312,7 +314,7 @@ export class Player {
     // einer Bö gleitet, bekommt Auftrieb und Schub in Windrichtung. Kostet
     // Ausdauer (außer beim Haken-Schwung); ist sie leer, wird es ein Fall.
     const glidePower = this.hasGlider || this.hookGlide;
-    if (glidePower && !this.grounded && input.jump && this.vel.y < 1.5 && (!climb || climb.drain(2.2, dt))) {
+    if (glidePower && !this.grounded && input.jump && this.vel.y < 1.5 && (this.hookGlide || !climb || climb.drain(2.2, dt))) {
       if (!this.gliding) {
         particles.burst(10, {
           x: this.pos.x, y: this.pos.y + 0.4, z: this.pos.z, spread: 1.1,

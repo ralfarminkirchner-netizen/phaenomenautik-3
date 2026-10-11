@@ -9,6 +9,7 @@ import * as THREE from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { preloadAll } from "../src/three/assets";
 import { Ship } from "../src/three/ship";
+import { Player } from "../src/three/player";
 import { Water } from "../src/three/water";
 import { WAVES_GLSL, waveHeight } from "../src/three/waves";
 import type { ParticleSystem } from "../src/three/particles";
@@ -17,7 +18,7 @@ import { ROOMS, createOpenWorld, sampleFields, stepOpenWorld } from "../src/game
 import { terrainHeight } from "../src/game/worldLayout";
 
 type Field = NonNullable<Parameters<Ship["sailDt"]>[6]>;
-const particles = { spawn() {} } as unknown as ParticleSystem;
+const particles = { spawn() {}, burst() {} } as unknown as ParticleSystem;
 const dt = 1 / 60;
 const still = { forward: 0, turn: 0, turbo: false };
 const sailing = { forward: 1, turn: 0, turbo: false };
@@ -33,7 +34,7 @@ before(async () => {
     sail.name = name;
     scene.add(sail);
   }
-  GLTFLoader.prototype.loadAsync = async () => ({ scene } as GLTF);
+  GLTFLoader.prototype.loadAsync = async () => ({ scene, animations: [] } as unknown as GLTF);
   try { await preloadAll(); } finally { GLTFLoader.prototype.loadAsync = original; }
 });
 
@@ -50,6 +51,41 @@ function integrate(ship: Ship, ticks: number, field: Field, input = sailing) {
 function close(actual: number, expected: number, tolerance = 1e-9, context = "") {
   assert.ok(Math.abs(actual - expected) <= tolerance, `${context}: ${actual} != ${expected}`);
 }
+
+test("hook glide carries at zero stamina; ordinary glider still consumes stamina", () => {
+  const player = new Player(new THREE.Scene());
+  player.place(0, 20, 0, 0);
+  player.grounded = false;
+  player.hookGlide = true;
+  let drains = 0;
+  const climb = { walls: [], drain() { drains++; return false; } };
+  const input = { x: 0, z: 0, sprint: false, jump: true };
+  for (let i = 0; i < 45; i++) player.update(dt, input, () => 0, [], particles, climb);
+  assert.equal(player.gliding, true);
+  assert.equal(drains, 0);
+
+  player.place(0, 20, 0, 0);
+  player.grounded = false;
+  player.hasGlider = true;
+  player.update(dt, input, () => 0, [], particles, climb);
+  assert.equal(player.gliding, false);
+  assert.equal(drains, 1);
+});
+
+test("placing a player ends hook glide and landing ends carried momentum", () => {
+  const player = new Player(new THREE.Scene());
+  player.hookGlide = true;
+  player.gliding = true;
+  player.place(0, 0, 0, 0);
+  assert.equal(player.hookGlide, false);
+  assert.equal(player.gliding, false);
+  player.grounded = false;
+  player.hookGlide = true;
+  player.vel.y = -3;
+  player.update(dt, { x: 0, z: 0, sprint: false, jump: false }, () => 0, [], particles);
+  assert.equal(player.grounded, true);
+  assert.equal(player.hookGlide, false);
+});
 
 // Interpret coefficients emitted into the actual shader, rather than repeating
 // the WAVES configuration or calling the CPU implementation as its own oracle.
