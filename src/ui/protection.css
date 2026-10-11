@@ -15,7 +15,8 @@
 .protection-actions button:hover { background: #ffffff12; }
 .scene-world { z-index: 0; }
 .scene-world canvas { display: block; }
-.game-surfaces { position: relative; z-index: 10; }
+.game-surfaces { position: absolute; inset: 0; z-index: 10; pointer-events: none; }
+.game-surfaces :is(.open-world-shelf, .load-error) { pointer-events: auto; }
 .scene-loading { position: fixed; top: 90px; left: 4vw; color: var(--shore-white); font-size: 14px; text-shadow: 0 1px 6px #000; }
 .title-harbor, .gentle-encounter { position: fixed; inset: 0; pointer-events: none; color: var(--shore-white); display: flex; align-items: flex-end; padding: 0 4vw 34px; }
 .gentle-encounter { z-index: 800; }
