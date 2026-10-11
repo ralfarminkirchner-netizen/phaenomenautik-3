@@ -106,7 +106,7 @@ const KNOWLEDGE: KnowledgeEntry[] = [
   K("inseln", "lore", /insel|phanomen|archipel|was ist das fur/,
     "Die Inseln sind erfundene Landschaften, die thematische Begriffe als Bilder aufgreifen. Du kannst sie betreten, aus der Ferne betrachten oder auslassen. Es gibt keine Pflicht, sie abzuschließen."),
   K("sturmherd", "lore", /sturmherd|mitte|auge des/,
-    "Der Sturmherd bildet einen erzählerischen Abschluss dieser Seekarte. Die Freischaltung ist eine Spielregel. Du musst dafür keine persönliche Geschichte erzählen und kannst den Besuch auslassen."),
+    "Der Sturmherd bildet einen erzählerischen Abschluss dieser Seekarte — freiwillig und ohne Zugangsvoraussetzungen. Du musst dafür keine persönliche Geschichte erzählen und kannst den Besuch auslassen; das Abschluss-Flag bleibt historische Kompatibilität, keine Sperre."),
   K("meer", "meer", /meer|see|ozean|wasser|wo sind wir/,
     "Dieses Meer ist eine erfundene Landschaft. Es bietet Wege zum Segeln, Lesen und Erkunden; es behauptet nichts über die Lebensgeschichte der spielenden Person."),
   K("wetter", "meer", /wetter|sturm|wellen|wind/,

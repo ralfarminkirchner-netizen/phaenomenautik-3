@@ -6,6 +6,7 @@ export interface HudState {
   openWorldRevision: number;
   activeRoom: RoomId | null;
   encounterId: string | null;
+  variantId: string | null; // aktive Masken-Begegnung (M4.2)
   mode: "title" | "sailing" | "onfoot";
   stability: number;
   maxStability: number;
@@ -56,6 +57,7 @@ export const initialHud: HudState = {
   openWorldRevision: 0,
   activeRoom: null,
   encounterId: null,
+  variantId: null,
   mode: "title",
   stability: 1,
   maxStability: 1,

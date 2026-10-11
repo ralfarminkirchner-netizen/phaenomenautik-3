@@ -90,6 +90,9 @@ export interface SaveGame {
   compassEntries: string[]; // erkannte Manipulations-Taktiken (Manipulations-Kompass)
   // Phänomen-Netz (M4)
   graph: GraphProgress; // Nebel-of-War: verstandene / begegnete Knoten, befahrene Kanten
+  // Varianten-Motor (M4.2): Masken — gefunden / begriffen
+  variantsUnderstood: string[];
+  variantsMet: string[];
 }
 
 const SAVE_KEY = "phaenomenautik3-save-v1";
@@ -202,6 +205,8 @@ export function newGame(): SaveGame {
     duelsDone: [],
     compassEntries: [],
     graph: emptyGraphProgress(),
+    variantsUnderstood: [],
+    variantsMet: [],
   };
   ensureOpenWorld(save);
   try {
@@ -298,6 +303,10 @@ function prepareSave(s: SaveGame, initializeWorld = false): void {
     s.duelsDone ??= [];
     s.compassEntries ??= [];
     s.graph ??= graphProgressFromIslands(s.islands); // M4: alter Insel-Fortschritt wird ins Netz übernommen
+    // M4.2: Masken-Register — optional; malformed Stände (kein String-Array)
+    // werden zurückgesetzt statt später an .includes zu crashen.
+    s.variantsUnderstood = Array.isArray(s.variantsUnderstood) ? s.variantsUnderstood.filter((x): x is string => typeof x === "string") : [];
+    s.variantsMet = Array.isArray(s.variantsMet) ? s.variantsMet.filter((x): x is string => typeof x === "string") : [];
     if (initializeWorld) ensureOpenWorld(s);
 }
 

@@ -6,6 +6,7 @@ import { BattleOverlay } from "./ui/BattleOverlay";
 import { DialogOverlay } from "./ui/DialogOverlay";
 import { JournalOverlay, LoreOverlay } from "./ui/JournalOverlay";
 import { ChatOverlay } from "./ui/ChatOverlay";
+import { VariantOverlay } from "./ui/VariantOverlay";
 import { CookOverlay } from "./ui/CookOverlay";
 import { DuelOverlay } from "./ui/DuelOverlay";
 import { Protection } from "./ui/Protection";
@@ -157,7 +158,7 @@ export default function App() {
       <SurfaceBoundary key={surfaceEpoch}><div className={`game-surfaces ${h.paused || h.protectionOpen ? "surface-paused" : ""}`} inert={Boolean(h.paused || h.protectionOpen || h.explorationOpen)}>
         {(!sceneReady || phase === "loading") && phase !== "error" && <p className="scene-loading" role="status">Die See wird bereitet …</p>}
         {phase === "error" && <div className="load-error"><h1>Die Spielwelt bleibt geschlossen</h1><p role="alert">{loadError}</p><button onClick={() => setPhase("title")}>Zum Einstieg</button></div>}
-        {phase === "game" && !h.explorationOpen && <><HUD /><OpenWorldPanel checkpoint={checkpoint} onImport={importSave} /><BattleOverlay /><DialogOverlay /><JournalOverlay /><LoreOverlay /><ChatOverlay /><CookOverlay /><DuelOverlay /></>}
+        {phase === "game" && !h.explorationOpen && <><HUD /><OpenWorldPanel checkpoint={checkpoint} onImport={importSave} /><BattleOverlay /><DialogOverlay /><JournalOverlay /><LoreOverlay /><ChatOverlay /><CookOverlay /><DuelOverlay /><VariantOverlay /></>}
         {phase === "title" && !h.explorationOpen && <TitleScreen ready={sceneReady} hasSave={hasSave} onEncounter={openEncounter} onNew={() => begin(newGame())} onContinue={() => { const s = saveRef.current || loadSave(); if (s) begin(s); }} />}
       </div></SurfaceBoundary>
       {h.explorationOpen && encounterSave && <SurfaceBoundary><GentleEncounter save={encounterSave} checkpoint={checkpoint} onScene={presentEncounter} onChange={next => { if (saveRef.current) { saveRef.current.gentleEncounter = next; persistSave(saveRef.current); } }} onClose={() => { checkpoint(); getWorld()?.setPresentation(phase === "game" ? null : "title"); store.set({ explorationOpen: false, paused: true, protectionOpen: "pause" }); }} onRetreat={retreat} /></SurfaceBoundary>}
