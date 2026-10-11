@@ -15,6 +15,35 @@ function useHud() {
 
 const DIRS = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"];
 
+/** Windfahne unter dem Kompass: zeigt, wohin der Wind weht (relativ zum
+ *  Blick), seine Stärke und hebt Böen hervor — dort sind auch die Wellen
+ *  höher und das Segeln schneller. */
+function WindVane({ yaw, windDeg, windSpeed, gust }: { yaw: number; windDeg: number; windSpeed: number; gust: number }) {
+  const heading = Math.atan2(Math.sin(yaw), Math.cos(yaw));
+  let rel = (windDeg * Math.PI) / 180 - -heading;
+  while (rel > Math.PI) rel -= Math.PI * 2;
+  while (rel < -Math.PI) rel += Math.PI * 2;
+  const deg = (rel * 180) / Math.PI;
+  const strong = gust > 0.45;
+  return (
+    <div
+      className={`mt-1.5 flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] backdrop-blur-sm transition-colors ${
+        strong ? "border-sky-300/60 bg-sky-500/25 text-sky-100" : "border-white/15 bg-black/35 text-white/80"
+      }`}
+      title="Wind: Richtung (wohin er weht), Stärke, Bö. Starke Böen werfen höhere Wellen und tragen das Segel schneller."
+    >
+      <span
+        className="inline-block text-[13px] transition-transform duration-300"
+        style={{ transform: `rotate(${deg}deg)` }}
+      >
+        ➤
+      </span>
+      <span className="tabular-nums">{windSpeed.toFixed(1)} m/s</span>
+      {strong && <span className="font-semibold">Bö!</span>}
+    </div>
+  );
+}
+
 function Compass({ yaw, bearing, targetName, targetDist }: { yaw: number; bearing: string | number; targetName: string; targetDist: number }) {
   // Kompass-Strip: 240° sichtbar, Mitte = Blickrichtung
   const heading = Math.atan2(Math.sin(yaw), Math.cos(yaw));
@@ -106,6 +135,7 @@ export function HUD() {
       {/* Kompass oben mittig */}
       <div className="absolute top-20 left-1/2 -translate-x-1/2 flex flex-col items-center">
         <Compass yaw={h.compassYaw} bearing={h.targetBearing} targetName={h.targetName} targetDist={h.targetDist} />
+        <WindVane yaw={h.compassYaw} windDeg={h.windDeg} windSpeed={h.windSpeed} gust={h.gust} />
       </div>
 
       {/* Uhrzeit & Wetter */}
@@ -151,8 +181,27 @@ export function HUD() {
         <div>🪵 Holz: <span className="font-semibold">{h.wood}</span></div>
         <div>💎 Kristalle: <span className="font-semibold">{h.crystals}</span></div>
         <div className="text-xs text-white/70">
-          {h.weaponLevel >= 2 ? "⚔ Axt der Klarheit" : "🪓 Axt"}
-          {buffLeft > 0 && <span className="ml-2 text-amber-300">🔥 {Math.floor(buffLeft / 60)}:{String(buffLeft % 60).padStart(2, "0")}</span>}
+          {buffLeft > 0 && <span className="mr-2 text-amber-300">🔥 {Math.floor(buffLeft / 60)}:{String(buffLeft % 60).padStart(2, "0")}</span>}
+        </div>
+        {/* Werkzeuge: 1/2/3 wählt, Klick benutzt */}
+        <div className="flex justify-end gap-1.5 pt-1">
+          {([
+            { id: "axe", icon: "🪓", name: h.weaponLevel >= 2 ? "Axt der Klarheit" : "Axt", hint: "Bäume fällen" },
+            { id: "shovel", icon: "🥄", name: "Schaufel", hint: "Boden durchstöbern" },
+            { id: "hook", icon: "🪝", name: "Enterhaken", hint: "werfen · hochziehen · Wind fangen" },
+          ] as const).map((t, i) => (
+            <div
+              key={t.id}
+              title={`${t.name} — ${t.hint} (Taste ${i + 1})`}
+              className={`px-2 py-1 rounded-lg border text-xs transition-colors ${
+                h.tool === t.id
+                  ? "bg-amber-400/90 text-black border-amber-300 font-semibold"
+                  : "bg-black/35 text-white/70 border-white/15"
+              }`}
+            >
+              {t.icon} <span className="opacity-70">{i + 1}</span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -173,7 +222,7 @@ export function HUD() {
       <div className="absolute bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-white/40 text-center">
         {h.mode === "sailing"
           ? "W/S Segel · A/D Ruder · Shift Turbo · Maus Umschauen · E Anlegen"
-          : "WASD Laufen · Shift Sprint · Leertaste Sprung · Klick Axt · Q Ausweichen · E Interaktion · J Journal · T Bauen · Mooswände klettern"}
+          : "WASD Laufen · Shift Sprint · 2× Leertaste Doppelsprung · 1/2/3 Werkzeug · Klick benutzen · Q Ausweichen · E Interaktion · J Journal · T Bauen · Mooswände klettern"}
       </div>
       )}
 

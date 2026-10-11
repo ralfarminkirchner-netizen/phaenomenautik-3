@@ -98,6 +98,7 @@ export function sampleFields(s: OpenWorldState, x: number, z: number) {
     currentZ: Math.cos(x / 710 + s.seconds / 95) * flow,
     tide, storm, visibility: 1100 - storm * 680,
     soundMask: clamp(windSpeed / 23 + storm * 0.5 - shelter * 0.12, 0, 1),
+    gust, // örtlicher Böenanteil (−0.75…+0.75) — treibt auch die Wellenhöhe
   };
 }
 

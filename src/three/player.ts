@@ -42,6 +42,7 @@ export class Player {
   private coyote = 0;
   private jumpBuf = 0;
   private airJumps = 0;
+  private prevJump = false;
   attackT = 0;
   dodgeT = 0;
   hitT = 0;
@@ -49,6 +50,7 @@ export class Player {
   climbing: { def: ClimbWallDef; u: number; v: number } | null = null;
   hasGlider = false; // M3: gefertigter Gleitschirm (Ausrüstung)
   gliding = false;
+  hookGlide = false; // nach Enterhaken-Loslassen: der Wind trägt weiter
 
   private rig: THREE.Object3D;
   private mixer: THREE.AnimationMixer;
@@ -246,6 +248,7 @@ export class Player {
     colliders: { x: number; z: number; r: number }[],
     particles: ParticleSystem,
     climb?: ClimbCtx,
+    wind?: { windX: number; windZ: number; windSpeed: number; gust: number },
   ) {
     const sin = Math.sin(this.camYaw);
     const cos = Math.cos(this.camYaw);
@@ -276,7 +279,12 @@ export class Player {
     this.vel.x = Math.abs(this.vel.x - tx) < acc * dt ? tx : this.vel.x + Math.sign(tx - this.vel.x) * acc * dt;
     this.vel.z = Math.abs(this.vel.z - tz) < acc * dt ? tz : this.vel.z + Math.sign(tz - this.vel.z) * acc * dt;
 
-    if (input.jump) this.jumpBuf = BUFFER;
+    // Sprung-Puffer nur bei der Tasten-Flanke setzen — hält man die Taste
+    // gedrückt, feuerte der Doppelsprung bisher sofort im nächsten Frame
+    // mit (fühlte sich wie ein unkontrollierbarer Super-Sprung an).
+    const jumpPressed = input.jump && !this.prevJump;
+    this.prevJump = input.jump;
+    if (jumpPressed) this.jumpBuf = BUFFER;
     else this.jumpBuf = Math.max(0, this.jumpBuf - dt);
     this.coyote = this.grounded ? COYOTE : Math.max(0, this.coyote - dt);
     if (this.jumpBuf > 0 && this.coyote > 0) {
@@ -299,9 +307,12 @@ export class Player {
       });
     }
 
-    // Gleitschirm (M3): in der Luft Leertaste halten — sanftes Sinken, Auftrieb
-    // in Blickrichtung. Kostet Ausdauer; ist sie leer, wird es ein normaler Fall.
-    if (this.hasGlider && !this.grounded && input.jump && this.vel.y < 1.5 && (!climb || climb.drain(2.2, dt))) {
+    // Gleitschirm (M3) oder Enterhaken-Schwung: in der Luft Leertaste halten —
+    // sanftes Sinken, Auftrieb in Blickrichtung. Böen tragen spürbar: wer in
+    // einer Bö gleitet, bekommt Auftrieb und Schub in Windrichtung. Kostet
+    // Ausdauer (außer beim Haken-Schwung); ist sie leer, wird es ein Fall.
+    const glidePower = this.hasGlider || this.hookGlide;
+    if (glidePower && !this.grounded && input.jump && this.vel.y < 1.5 && (!climb || climb.drain(2.2, dt))) {
       if (!this.gliding) {
         particles.burst(10, {
           x: this.pos.x, y: this.pos.y + 0.4, z: this.pos.z, spread: 1.1,
@@ -314,10 +325,21 @@ export class Player {
       const fz = -Math.cos(this.camYaw);
       this.vel.x += fx * 22 * dt;
       this.vel.z += fz * 22 * dt;
+      // Wind fangen: Böen geben Auftrieb und Schub — man kann sich von Bö zu
+      // Bö hangeln und bleibt so deutlich länger in der Luft.
+      if (wind) {
+        const catch_ = Math.max(0, wind.gust) * clamp(wind.windSpeed / 10, 0, 1.6);
+        if (catch_ > 0.08) {
+          this.vel.y += catch_ * 3.4 * dt;
+          this.vel.x += wind.windX * 0.55 * dt;
+          this.vel.z += wind.windZ * 0.55 * dt;
+        }
+      }
       const sp = Math.hypot(this.vel.x, this.vel.z);
-      if (sp > 9.5) {
-        this.vel.x *= 9.5 / sp;
-        this.vel.z *= 9.5 / sp;
+      const cap = wind && wind.gust > 0.3 ? 13 : 9.5;
+      if (sp > cap) {
+        this.vel.x *= cap / sp;
+        this.vel.z *= cap / sp;
       }
     } else {
       this.gliding = false;
@@ -357,6 +379,7 @@ export class Player {
       this.vel.y = 0;
       this.grounded = true;
       this.airJumps = 0;
+      this.hookGlide = false;
     } else if (this.pos.y - ground > 0.05) {
       this.grounded = false;
     }
