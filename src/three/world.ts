@@ -37,9 +37,11 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 
 import { createFixedStepper } from "../game/fixedStep";
-import { ROOMS, ensureOpenWorld, stepOpenWorld, sampleFields, applyWorldAction, recordRoomAction, addObservation, reviseObservation, syncNpcMemory, type RoomId } from "../game/openWorld";
+import { ROOMS, ensureOpenWorld, stepOpenWorld, sampleFields, applyWorldAction, recordRoomAction, addObservation, reviseObservation, compareObservations, syncNpcMemory, type RoomId, type ComparisonRelation } from "../game/openWorld";
 import { PhenomenonRooms, harborPierHeightAt } from "./phenomenonRooms";
 import { NODE_BY_ID } from "../game/phenomenaGraph";
+import { autoUnderstoodByNode, todaysVariants, VARIANT_BY_ID } from "../game/variants";
+import { Wisps } from "./wisps";
 
 export type PresentationMode = "title" | "arrival" | "look" | "mark" | "distance";
 
@@ -48,6 +50,11 @@ interface PresentationSnapshot {
   cameraQuaternion: THREE.Quaternion;
   visibility: { object: THREE.Object3D; visible: boolean }[];
   cloudPositions: THREE.Vector3[];
+}
+
+/** Echtes Kalenderdatum (UTC) — Basis der deterministischen Masken-Rotation (kein FOMO). */
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export class GameWorld {
@@ -118,6 +125,27 @@ export class GameWorld {
   private npcs!: Npcs;
   private loreStones!: LoreStones;
   private creatures = new Map<string, Creature>();
+  private wisps!: Wisps; // Masken (M4.2) — Strandläufer bleiben aus (offene Welt hat eigene Begegnungen)
+  private gameDate = ""; // ISO-Datum der laufenden Tages-Rotation
+  private lastDateCheck = 0; // Throttle für den Tageswechsel-Check
+  private maskSyncAt = 0; // Throttle für das Nachladen naher Masken
+
+  /** M4.2 (Vollkatalog): Tagesliste neu berechnen (Datum, Begreifen, Rotation). */
+  private refreshMasks() {
+    this.wisps.setVariantDay(todaysVariants(this.gameDate, this.save.graph, this.save));
+  }
+
+  /** M4.2 (Vollkatalog): Nahe Masken rendern, ferne aus der Welt nehmen (Performance). */
+  private syncMasks(t: number) {
+    if (t - this.maskSyncAt < 2) return;
+    this.maskSyncAt = t;
+    const sailing = this.save.mode === "sailing";
+    const fx = sailing ? this.ship.x : this.player.pos.x;
+    const fz = sailing ? this.ship.z : this.player.pos.z;
+    const R = 650;
+    const near = this.wisps.todaysVariantSpawns.filter((s) => (s.x - fx) ** 2 + (s.z - fz) ** 2 <= R * R);
+    this.wisps.syncVariantSpawns(near);
+  }
   private echoOrb: THREE.Mesh | null = null;
   private loot!: Loot;
   private structures!: Structures;
@@ -201,6 +229,12 @@ export class GameWorld {
 
     // Lore-Runensteine
     this.loreStones = new LoreStones(this.scene, save.echoesFound);
+
+    // Masken des Tages (M4.2): Tages-Rotation, deterministisch, kein FOMO.
+    // Strandläufer (M4) bleiben aus — die offene Welt bringt eigene Begegnungen.
+    this.wisps = new Wisps(this.scene, save.graph, false);
+    this.gameDate = todayIso();
+    this.refreshMasks();
 
     // Sammelbare Materialien + gebaute Strukturen
     this.loot = new Loot(this.scene, save.lootTaken);
@@ -318,7 +352,7 @@ export class GameWorld {
 
   get uiLock(): boolean {
     const st = store.get();
-    return !!(this.presentation !== null || isProtectionPaused(st) || st.dead || st.dialogNpc || st.battlePhen || st.journalOpen || st.loreStone || st.chatOpen || st.cookOpen || st.duelId);
+    return !!(this.presentation !== null || isProtectionPaused(st) || st.dead || st.dialogNpc || st.battlePhen || st.encounterId || st.variantId || st.journalOpen || st.loreStone || st.chatOpen || st.cookOpen || st.duelId);
   }
 
   /** Ruhige Darstellung derselben Welt; die Spielsimulation bleibt eingefroren. */
@@ -772,6 +806,18 @@ export class GameWorld {
     this.currentPrompt = null;
     if (this.uiLock) return;
     if (this.save.mode === "sailing") {
+      // Meer-Maske (M4.2): vom Schiff aus zu begreifen — freiwillig, kein Zwang.
+      // Nur See-Masken (water=true): eine treibende Land-Maske wird nicht gesucht.
+      const seaMask = this.wisps.nearestVariant(this.ship.x, this.ship.z, 26, true);
+      if (seaMask && seaMask.kind === "variant") {
+        const x = seaMask.spawn.variant;
+        this.currentPrompt = {
+          key: "E",
+          text: `Eine Maske treibt am Schiff: ${x.maskName} — ${x.epithet}${seaMask.spawn.drifted ? " · fern von zu Hause" : ""}`,
+          action: () => this.openVariantEncounter(x.id),
+        };
+        return;
+      }
       // Anlegen möglich?
       const depth = terrainHeight(this.ship.x, this.ship.z);
       if (depth > -5.5 && Math.abs(this.ship.speed) < 6) {
@@ -821,6 +867,19 @@ export class GameWorld {
     const raft = this.structures.raftUnder(p.x, p.z);
     if (raft) {
       this.currentPrompt = null; // Paddelhinweis kommt über HUD-Textzeile
+    }
+
+    // Maske an Land (M4.2): freiwillige Begegnung — begreifen statt fangen.
+    // Nur Land-Masken (water=false): eine nahe See-Maske wird nicht gesucht.
+    const landMask = this.wisps.nearestVariant(p.x, p.z, 3.4, false);
+    if (landMask && landMask.kind === "variant") {
+      const x = landMask.spawn.variant;
+      this.currentPrompt = {
+        key: "E",
+        text: `Maske: ${x.maskName} — ${x.epithet}${landMask.spawn.drifted ? " · fern von zu Hause" : ""}`,
+        action: () => this.openVariantEncounter(x.id),
+      };
+      return;
     }
 
     // Phänomen-Begegnung am Schrein
@@ -1865,6 +1924,19 @@ export class GameWorld {
     // NPCs & Lore-Steine
     this.npcs.update(dt, this.player.pos, this.uiLock);
     this.loreStones.update(t, this.camera.position);
+    // Tages-Rotation (M4.2): beim Tageswechsel die Masken neu setzen — kein FOMO,
+    // was verpasst wird, kommt wieder (Orte rotieren, nichts verfällt).
+    if (t - this.lastDateCheck > 5) {
+      this.lastDateCheck = t;
+      const d = todayIso();
+      if (d !== this.gameDate) {
+        this.gameDate = d;
+        this.refreshMasks();
+        store.toast("Ein neuer Tag — die Masken schwirren an anderen Orten. Nichts geht verloren.", "info");
+      }
+    }
+    this.syncMasks(t);
+    this.wisps.update(t, focus);
 
     // Echo-Orb schwebt
     if (this.echoOrb) {
@@ -2152,9 +2224,42 @@ export class GameWorld {
     store.set({ openWorldRevision: store.get().openWorldRevision + 1 });
   }
 
+  /** Zwei Beobachtungen freiwillig vergleichen; die Beziehung wird gespeichert. */
+  compareObservations(aId: string, bId: string, relation: ComparisonRelation): string {
+    if (this.uiLock) return "Die Welt ist gerade angehalten.";
+    const result = compareObservations(this.getOpenWorldState(), aId, bId, relation);
+    this.persist();
+    store.set({ openWorldRevision: store.get().openWorldRevision + 1 });
+    return result;
+  }
+
   exportSave(): string {
     this.checkpoint(); // Export also preserves the in-memory state if local storage is blocked.
     return JSON.stringify(this.save, null, 2);
+  }
+
+  /** QA-Hook (M4.2): aktive Masken in Render-Nähe */
+  get variantList(): { variantId: string; maskName: string; nodeId: string; islandId: string | null; x: number; z: number; drifted: boolean }[] {
+    return this.wisps.variantList();
+  }
+
+  /** QA-Hook (M4.2): die volle Tagesliste aller Masken (unabhängig von der Nähe) */
+  get todaysMasks(): { variantId: string; maskName: string; nodeId: string; islandId: string | null; x: number; z: number; drifted: boolean; water: boolean }[] {
+    return this.wisps.todaysVariantSpawns.map((s) => ({
+      variantId: s.variant.id,
+      maskName: s.variant.maskName,
+      nodeId: s.variant.nodeId,
+      islandId: s.islandId,
+      x: s.x,
+      z: s.z,
+      drifted: s.drifted,
+      water: s.water,
+    }));
+  }
+
+  /** QA-Hook (M4.2): Datum der laufenden Tages-Rotation */
+  get currentGameDate(): string {
+    return this.gameDate;
   }
 
   getDiagnostics() {
@@ -2176,9 +2281,50 @@ export class GameWorld {
     if (!node) return;
     if (!this.save.graph.met.includes(nodeId)) this.save.graph.met.push(nodeId);
     if (!this.save.graph.understood.includes(nodeId)) this.save.graph.understood.push(nodeId);
+    // Erkenntnis-Regel: Wer den Kern begreift, durchschaut alle seine Masken.
+    const masks = autoUnderstoodByNode(nodeId, this.save);
+    if (masks.length > 0) {
+      for (const m of masks) if (!this.save.variantsUnderstood.includes(m.id)) this.save.variantsUnderstood.push(m.id);
+      const names = masks.map((m) => m.maskName).slice(0, 3).join(", ");
+      store.toast(`Du durchschaust die Maske${masks.length > 1 ? "n" : ""} sofort: ${names}${masks.length > 3 ? " …" : ""}`, "info");
+      for (const m of masks) this.wisps.dissolveVariant(m.id, this.particles);
+      this.refreshMasks();
+    }
     this.persist();
     store.set({ encounterId: null });
     store.toast(`Begegnung mit ${node.name} im Register bewahrt.`);
+  }
+
+  // ── Masken-Begegnungen (M4.2) ────────────────────────────────────
+  /** Maske begegnen: als „gefunden" vermerken (Kern-Knoten als begegnet), Overlay zeigen. */
+  openVariantEncounter(variantId: string) {
+    const v = VARIANT_BY_ID.get(variantId);
+    if (!v) return;
+    if (!this.save.variantsMet.includes(variantId)) this.save.variantsMet.push(variantId);
+    if (!this.save.graph.met.includes(v.nodeId)) this.save.graph.met.push(v.nodeId);
+    if (document.pointerLockElement) document.exitPointerLock();
+    audio.select();
+    store.set({ variantId });
+    this.persist();
+  }
+
+  /** Maske begreifen: Register-Eintrag (Maske, Kern, Zeile), Einsicht, Auflösung. */
+  completeVariantEncounter(variantId: string) {
+    const v = VARIANT_BY_ID.get(variantId);
+    if (!v) {
+      store.set({ variantId: null });
+      return;
+    }
+    if (!this.save.variantsUnderstood.includes(variantId)) {
+      this.save.variantsUnderstood.push(variantId);
+      grantXp(this.save.player, 4);
+      store.toast(v.begreifen, "good");
+      audio.understand();
+      this.wisps.dissolveVariant(variantId, this.particles);
+      this.refreshMasks();
+    }
+    store.set({ variantId: null });
+    this.persist();
   }
 
   get canvasElement() {

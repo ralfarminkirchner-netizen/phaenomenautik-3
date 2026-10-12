@@ -85,7 +85,7 @@ function EncounterInner({ nodeId }: { nodeId: string }) {
 
         <div className="px-4 pb-3 flex items-center justify-between">
           <span className="text-[10px] text-white/35">
-            {onFinal ? "Die wahre Zeile wandert ins Atlas-Register" : `Hinhören · ${step + 1} / ${lines.length}`}
+            {onFinal ? "Eine mögliche Lesart wandert als deine Begegnung ins Atlas-Register — revidierbar" : `Hinhören · ${step + 1} / ${lines.length}`}
           </span>
           {onFinal ? (
             <button
