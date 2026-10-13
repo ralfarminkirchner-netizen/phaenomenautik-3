@@ -28,6 +28,8 @@ jobs:
       # npm ci verifies that the committed lockfile remains installable.
       - run: npm ci --no-audit --no-fund
       - run: npm run build
+      - name: Check world, save and review regressions
+        run: npm run test:world
       - name: Check graph data and progress rules
         run: node qa/graph.cjs
       - name: Check production server and asset responses

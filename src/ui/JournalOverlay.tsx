@@ -12,10 +12,12 @@ import { MATERIALS, matName } from "../game/materials";
 import { RECIPES, INGREDIENTS, GF_DISCLAIMER } from "../game/cooking";
 import { TACTICS } from "../game/duels";
 import { saveGfMode } from "../game/state";
+import { VARIANTS, VARIANT_BY_ID } from "../game/variants";
+import { NODE_BY_ID } from "../game/phenomenaGraph";
 import { BodyMap } from "./BodyMap";
 import { ObservationJournal } from "./ObservationJournal";
 
-type JournalTab = "beobachtungen" | "atlas" | "koerper" | "rezepte" | "kompass";
+type JournalTab = "beobachtungen" | "atlas" | "register" | "koerper" | "rezepte" | "kompass";
 
 export function JournalOverlay() {
   const [open, setOpen] = useState(store.get().journalOpen);
@@ -33,24 +35,38 @@ export function JournalOverlay() {
   const quests = activeQuests(save);
   const foundLore = LORE.filter((l) => save.echoesFound.includes(l.id));
   const metNpcs = NPCS.filter((n) => save.npcMemory[n.id]?.met);
-  const remaining = PHENOMENA.filter((p) => !p.final && !save.islands.find((i) => i.id === p.id)?.overcome).length;
   const foundRecipes = RECIPES.filter((r) => save.recipesFound.includes(r.id));
   const foodStock = Object.entries(save.food).filter(([, n]) => n > 0);
 
   const TABS: { id: JournalTab; label: string }[] = [
     { id: "beobachtungen", label: "Beobachtungen" },
     { id: "atlas", label: "🗺 Atlas" },
+    { id: "register", label: "📓 Register" },
     { id: "koerper", label: "🧍 Körper" },
     { id: "rezepte", label: "🍲 Rezepte" },
     { id: "kompass", label: "🧭 Kompass" },
   ];
+
+  // Atlas-Register (M4.2): tatsächlich begriffene und begegnete Masken mit
+  // menschlichen Namen — Strand- und Seemasken, keine internen Kennungen.
+  const todaysMasks = world.todaysMasks ?? [];
+  const whereToday = (variantId: string) => {
+    const spawn = todaysMasks.find((m) => m.variantId === variantId);
+    return spawn ? (spawn.water ? "heute auf dem Meer" : "heute am Strand") : "heute nicht in Sicht";
+  };
+  const understoodMasks = save.variantsUnderstood
+    .map((id) => VARIANT_BY_ID.get(id))
+    .filter((v): v is (typeof VARIANTS)[number] => v !== undefined);
+  const metOnlyMasks = save.variantsMet
+    .map((id) => VARIANT_BY_ID.get(id))
+    .filter((v): v is (typeof VARIANTS)[number] => v !== undefined && !save.variantsUnderstood.includes(v.id));
 
   return (
     <div className="absolute inset-0 z-30 bg-black/70 backdrop-blur-sm flex items-center justify-center pointer-events-auto p-6">
       <div role="dialog" aria-label="Journal" className={`w-full ${tab === "beobachtungen" ? "max-w-4xl" : "max-w-2xl"} max-h-[86vh] flex flex-col rounded-2xl border border-amber-200/20 bg-[#101a2a] shadow-2xl overflow-hidden`}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 bg-black/30">
           <h2 className="text-lg font-bold text-amber-100 tracking-wide">📖 Journal</h2>
-          <button className="text-white/50 hover:text-white text-lg px-2" onClick={() => store.set({ journalOpen: false })} title="Schließen (J/Esc)">
+          <button className="text-white/50 hover:text-white text-lg px-2" onClick={() => store.set({ journalOpen: false })} title="Schließen (Esc)">
             ✕
           </button>
         </div>
@@ -69,7 +85,47 @@ export function JournalOverlay() {
           ))}
         </div>
         <div className="overflow-y-auto px-5 py-4 space-y-6 text-sm bg-[#16233a]">
-          {tab === "beobachtungen" && <ObservationJournal notes={world.getOpenWorldState().notes} onRevise={(id, text) => world.reviseObservation(id, text)} />}
+          {tab === "beobachtungen" && <ObservationJournal notes={world.getOpenWorldState().notes} comparisons={world.getOpenWorldState().comparisons ?? []} onRevise={(id, text) => world.reviseObservation(id, text)} onCompare={(a, b, relation) => world.compareObservations(a, b, relation)} />}
+          {tab === "register" && (
+            <section>
+              <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-2">
+                Atlas-Register — Masken ({understoodMasks.length}/{VARIANTS.length} begriffen{save.variantsMet.length > 0 ? ` · ${save.variantsMet.length} begegnet` : ""})
+              </h3>
+              <p className="text-white/50 italic mb-3">
+                Jede Maske trägt denselben Kern in anderem Gewand. Begreifen statt Fangen — verpasste
+                und begriffene Masken bleiben wiederbegegnbar; die Rotation verändert nur die Orte.
+              </p>
+              {understoodMasks.length === 0 && metOnlyMasks.length === 0 ? (
+                <p className="text-white/50 italic">Noch keine Maske begegnet. Masken schwirren an den Stränden und auf dem Meer — freiwillig, ohne Folgen fürs Weitersegeln.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {understoodMasks.map((v) => {
+                    const node = NODE_BY_ID.get(v.nodeId);
+                    return (
+                      <li key={v.id} className="rounded-lg bg-black/30 border border-white/10 px-3 py-2">
+                        <div className="font-semibold" style={{ color: `hsl(${v.hue}, 70%, 72%)` }}>
+                          {v.maskName} <span className="text-xs italic text-white/50">— {v.epithet}</span>
+                          <span className="ml-2 text-amber-300 text-xs">begriffen ✦</span>
+                        </div>
+                        <div className="text-[12px] text-white/60">
+                          Kern: {node?.name ?? "ein noch unbenannter Kern"} · {whereToday(v.id)}
+                        </div>
+                      </li>
+                    );
+                  })}
+                  {metOnlyMasks.map((v) => (
+                    <li key={v.id} className="rounded-lg bg-black/30 border border-white/10 px-3 py-2">
+                      <div className="font-semibold" style={{ color: `hsl(${v.hue}, 70%, 72%)` }}>
+                        {v.maskName} <span className="text-xs italic text-white/50">— {v.epithet}</span>
+                        <span className="ml-2 text-sky-300 text-xs">begegnet</span>
+                      </div>
+                      <div className="text-[12px] text-white/60">{whereToday(v.id)}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
           {tab === "koerper" && (
             <section>
               <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-3">Körperkarte — was wirkt gerade?</h3>
@@ -180,9 +236,10 @@ export function JournalOverlay() {
           <section>
             <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-2">Die Reise</h3>
             <p className="text-white/85">
-              {overcome.length} von 12 Phänomenen überwunden
-              {overcome.filter((i) => i.understood).length > 0 && `, davon ${overcome.filter((i) => i.understood).length} verstanden`}
-              {save.finalUnlocked ? " — das Auge des Atlanten ist offen." : ` — ${remaining} warten noch.`}
+              Du bist {overcome.length} Begegnungen nachgegangen
+              {overcome.filter((i) => i.understood).length > 0 && `, ${overcome.filter((i) => i.understood).length} davon bis zum Kern verstanden`}
+              . Alles freiwillig, in beliebiger Reihenfolge.
+              {save.finalUnlocked && " Das Auge des Atlanten ist offen — ein historischer Abschluss, kein Tor und keine Pflicht."}
             </p>
           </section>
 
@@ -214,7 +271,7 @@ export function JournalOverlay() {
           <section>
             <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-2">Erkenntnisse (Atlas)</h3>
             {overcome.length === 0 ? (
-              <p className="text-white/50 italic">Noch keine. Die erste Insel wartet — folge dem Kompass.</p>
+              <p className="text-white/50 italic">Noch keine. Begegnungen finden dich auf der Reise — frei segeln genügt. Der Kompass ist ein Angebot, kein Zwang.</p>
             ) : (
               <ul className="space-y-2">
                 {overcome.map((i) => {

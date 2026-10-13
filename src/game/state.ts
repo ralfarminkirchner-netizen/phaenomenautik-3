@@ -7,6 +7,7 @@ import type { ActiveMeal, MicroKey } from "./cooking";
 import { store } from "./store";
 import { ensureOpenWorld, isOpenWorldState, type OpenWorldState } from "./openWorld";
 import { ensureNpcMemory, type NpcMemories } from "./npcMemory";
+import { isDigSpots, type DigSpots } from "./digging";
 
 export interface GentleEncounterState {
   step: "arrival" | "signs" | "choice" | "result" | "context";
@@ -70,6 +71,7 @@ export interface SaveGame {
   echoDrop: { x: number; z: number; crystals: number } | null; // hinterlassenes Echo (Souls-Regel)
   materials: Record<string, number>; // Inventar
   lootTaken: string[]; // eingesammelte Loot-Ids
+  dugSpots?: DigSpots; // Rasterzelle → Weltzeit; ältere v3-Spielstände können fehlen
   structures: PlacedStructure[]; // gebaute Objekte
   chestsOpened: string[]; // Truhen-Ids
   npcMemory: NpcMemories;
@@ -90,6 +92,9 @@ export interface SaveGame {
   compassEntries: string[]; // erkannte Manipulations-Taktiken (Manipulations-Kompass)
   // Phänomen-Netz (M4)
   graph: GraphProgress; // Nebel-of-War: verstandene / begegnete Knoten, befahrene Kanten
+  // Varianten-Motor (M4.2): Masken — gefunden / begriffen
+  variantsUnderstood: string[];
+  variantsMet: string[];
 }
 
 const SAVE_KEY = "phaenomenautik3-save-v1";
@@ -141,6 +146,7 @@ function parseSave(raw: string): SaveGame {
   ))) return fail();
   if (value.graph !== undefined && (!object(value.graph) || !strings(value.graph.understood) || !strings(value.graph.met) || !strings(value.graph.traveled))) return fail();
   if (value.openWorld !== undefined && !isOpenWorldState(value.openWorld)) return fail();
+  if (value.dugSpots !== undefined && !isDigSpots(value.dugSpots)) return fail();
   return value as unknown as SaveGame;
 }
 const GF_KEY = "phaenomenautik3-gf-mode"; // Titel-Schalter, unabhängig vom Spielstand
@@ -186,6 +192,7 @@ export function newGame(): SaveGame {
     echoDrop: null,
     materials: { stamm: 2, seil: 1 },
     lootTaken: [],
+    dugSpots: {},
     structures: [],
     chestsOpened: [],
     quests: {},
@@ -202,6 +209,8 @@ export function newGame(): SaveGame {
     duelsDone: [],
     compassEntries: [],
     graph: emptyGraphProgress(),
+    variantsUnderstood: [],
+    variantsMet: [],
   };
   ensureOpenWorld(save);
   try {
@@ -298,6 +307,10 @@ function prepareSave(s: SaveGame, initializeWorld = false): void {
     s.duelsDone ??= [];
     s.compassEntries ??= [];
     s.graph ??= graphProgressFromIslands(s.islands); // M4: alter Insel-Fortschritt wird ins Netz übernommen
+    // M4.2: Masken-Register — optional; malformed Stände (kein String-Array)
+    // werden zurückgesetzt statt später an .includes zu crashen.
+    s.variantsUnderstood = Array.isArray(s.variantsUnderstood) ? s.variantsUnderstood.filter((x): x is string => typeof x === "string") : [];
+    s.variantsMet = Array.isArray(s.variantsMet) ? s.variantsMet.filter((x): x is string => typeof x === "string") : [];
     if (initializeWorld) ensureOpenWorld(s);
 }
 

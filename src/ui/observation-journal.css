@@ -2,6 +2,16 @@
 .observation-journal h3 { color: #f6dfa8; font-size: 1.15rem; margin-bottom: .4rem; }
 .observation-intro p, .observation-empty { color: #bfc9d4; margin: .35rem 0; }
 .observation-comparison-controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .7rem; margin: 1.2rem 0 .5rem; }
+.observation-relation { display: flex; align-items: end; flex-wrap: wrap; gap: .7rem 1rem; margin: .8rem 0; }
+.observation-relation label { display: grid; gap: .3rem; }
+.observation-relation select { max-width: 100%; min-height: 2.2rem; padding: .3rem .6rem; color: #f0ece2; background: #0e192b; border: 1px solid #9baeb970; border-radius: .3rem; }
+.observation-pick { display: inline-flex; align-items: center; gap: .4rem; font-size: .8rem; color: #c8d9e6; }
+.observation-pick input { width: 1rem; height: 1rem; accent-color: #e3cf9f; }
+.observation-saved-comparisons { margin: 1rem 0; }
+.observation-saved-comparisons h4 { color: #c8d9e6; font-weight: 600; }
+.observation-saved-comparisons > ul > li { padding: .7rem 0; border-bottom: 1px solid #ffffff1c; overflow-wrap: anywhere; }
+.observation-saved-comparisons small { color: #a7b4c2; font-size: .8rem; margin-right: 1rem; }
+.observation-notice { color: #d3e4ca; }
 .observation-pages-comparing { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.6rem; }
 .observation-page { border-top: 1px solid #b6b1a440; padding: 1.2rem 0; min-width: 0; }
 .observation-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
@@ -18,7 +28,7 @@
 .observation-journal summary { cursor: pointer; color: #c8d9e6; }
 .observation-journal button { color: #f1d9a4; border-bottom: 1px solid #c6b48366; padding: .25rem .1rem; font-size: .8rem; }
 .observation-journal button:hover { color: #fff3d7; border-color: #f1d9a4; }
-.observation-journal button:focus-visible, .observation-journal summary:focus-visible { outline: 2px solid #f1d9a4; outline-offset: 3px; }
+.observation-journal button:focus-visible, .observation-journal summary:focus-visible, .observation-journal select:focus-visible, .observation-journal input:focus-visible { outline: 2px solid #f1d9a4; outline-offset: 3px; }
 .observation-journal button:disabled { opacity: .4; cursor: default; }
 .observation-journal button[aria-pressed="true"] { border-bottom-width: 2px; }
 .observation-journal textarea { display: block; width: 100%; margin-top: .4rem; padding: .6rem; background: #0e192b; border: 1px solid #9baeb970; border-radius: .3rem; color: #f0ece2; }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { store } from "../game/store";
 import { audio } from "../game/audio";
+import { handleProtectionKeyDown } from "../game/pause";
 import { Pause, LogOut, LifeBuoy, Volume2, VolumeX } from "lucide-react";
 
 export function Protection({ phase, canSave, onExit, onRetreat, onEncounter, checkpoint }: {
@@ -22,13 +23,8 @@ export function Protection({ phase, canSave, onExit, onRetreat, onEncounter, che
     if (h.protectionOpen) panel.current?.focus({ preventScroll: true });
   }, [h.protectionOpen]);
   useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault(); e.stopImmediatePropagation();
-      store.set({ paused: true, protectionOpen: "pause", menuOpen: false });
-    };
-    window.addEventListener("keydown", key, true);
-    return () => window.removeEventListener("keydown", key, true);
+    window.addEventListener("keydown", handleProtectionKeyDown, true);
+    return () => window.removeEventListener("keydown", handleProtectionKeyDown, true);
   }, []);
   return <>
     <nav className="protection-bar" aria-label="Unterbrechen, verlassen und Hilfe">

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { bayOptics, type OpenWorldState } from "../game/openWorld";
+import { bayOptics, CURRENT_ROOM, ensureCurrentRoom, type OpenWorldState } from "../game/openWorld";
 import { terrainHeight } from "../game/worldLayout";
 
 export const HARBOR_PIER = { x: 2270, z: 3300, halfWidth: 12.5, halfDepth: 5.35, repairStart: 9.5 } as const;
@@ -42,6 +42,13 @@ export class PhenomenonRooms {
     new THREE.MeshBasicMaterial({ color: 0xf3d09c }),
   );
   private readonly routeStones: THREE.Mesh[] = [];
+  private readonly currentGate = new THREE.Group();
+  private readonly currentMarker = new THREE.Group();
+  private readonly currentReference = new THREE.Group();
+  private readonly currentAnchor = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 6), this.copper);
+  private readonly currentTether = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1, 5), this.rope);
+  private readonly tetherDirection = new THREE.Vector3();
+  private readonly up = new THREE.Vector3(0, 1, 0);
   private lastWide: boolean | undefined;
 
   constructor(scene: THREE.Scene) {
@@ -49,6 +56,7 @@ export class PhenomenonRooms {
     this.makeBay();
     this.makeHarbor();
     this.makeShelter();
+    this.makeCurrentRoom();
     scene.add(this.group);
   }
 
@@ -222,7 +230,48 @@ export class PhenomenonRooms {
     }
   }
 
+  private makeCurrentRoom() {
+    this.currentGate.name = "Leittor";
+    this.currentMarker.name = "Treibende Markierboje";
+    this.currentReference.name = "Feste Vergleichsmarke";
+    for (const x of [-14, 14]) {
+      this.box(this.currentGate, [3.5, 1.3, 7], [x, 0.1, 0], this.darkTimber);
+      this.box(this.currentGate, [3.8, 0.28, 7.4], [x, 0.85, 0], this.timber);
+      this.pole(this.currentGate, x, 0, 4.5);
+    }
+    this.box(this.currentGate, [28, 0.45, 1], [0, 1.1, 0], this.copper);
+    for (let x = -11; x <= 11; x += 2) {
+      this.box(this.currentGate, [0.65, 3, 2.5], [x, -0.35, 0], this.timber);
+    }
+    const markerPaint = new THREE.MeshStandardMaterial({ color: 0xe1a33e, roughness: 0.65 });
+    for (const [buoy, paint] of [[this.currentMarker, markerPaint], [this.currentReference, this.canvas]] as const) {
+      const float = new THREE.Mesh(new THREE.SphereGeometry(1.65, 12, 8), paint);
+      float.scale.y = 0.55;
+      float.position.y = 0.35;
+      buoy.add(float);
+      this.pole(buoy, 0, 0, 5.5);
+      this.box(buoy, [2.6, 1.4, 0.12], [1.2, 4.6, 0], paint);
+    }
+    this.currentReference.position.set(CURRENT_ROOM.referenceX, 0, CURRENT_ROOM.referenceZ);
+    this.currentAnchor.position.set(CURRENT_ROOM.anchorX, 0, CURRENT_ROOM.anchorZ);
+    this.group.add(this.currentGate, this.currentMarker, this.currentReference, this.currentAnchor, this.currentTether);
+  }
+
   update(state: OpenWorldState, time: number, heightAt: (x: number, z: number, t: number) => number) {
+    const current = ensureCurrentRoom(state);
+    this.currentGate.position.set(CURRENT_ROOM.x, heightAt(CURRENT_ROOM.x, CURRENT_ROOM.z, time), CURRENT_ROOM.z);
+    this.currentGate.rotation.y = -THREE.MathUtils.degToRad(current.gateAngle);
+    this.currentMarker.position.set(current.marker.x, heightAt(current.marker.x, current.marker.z, time), current.marker.z);
+    this.currentReference.visible = current.reference;
+    this.currentReference.position.y = heightAt(CURRENT_ROOM.referenceX, CURRENT_ROOM.referenceZ, time);
+    this.currentAnchor.position.y = heightAt(CURRENT_ROOM.anchorX, CURRENT_ROOM.anchorZ, time);
+    this.tetherDirection.subVectors(this.currentMarker.position, this.currentAnchor.position);
+    const tetherLength = this.tetherDirection.length();
+    this.currentTether.visible = tetherLength > 0.05;
+    this.currentTether.position.copy(this.currentMarker.position).add(this.currentAnchor.position).multiplyScalar(0.5);
+    this.currentTether.position.y += 0.25;
+    this.currentTether.scale.y = tetherLength;
+    if (tetherLength > 0.05) this.currentTether.quaternion.setFromUnitVectors(this.up, this.tetherDirection.normalize());
     for (let i = 0; i < this.rafts.length; i++) {
       const raft = this.rafts[i];
       raft.position.y = heightAt(raft.position.x, raft.position.z, time);

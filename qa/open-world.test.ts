@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ROOMS, createOpenWorld, ensureOpenWorld, stepOpenWorld, sampleFields, bayOptics, applyWorldAction, availableActions, addObservation, reviseObservation, isOpenWorldState, setWorldTime, setWorldWeather, syncNpcMemory, knowledgeLine, type RoomId } from "../src/game/openWorld.ts";
+import { ROOMS, createOpenWorld, ensureOpenWorld, stepOpenWorld, sampleFields, bayOptics, applyWorldAction, availableActions, addObservation, reviseObservation, compareObservations, isOpenWorldState, setWorldTime, setWorldWeather, syncNpcMemory, knowledgeLine, type RoomId } from "../src/game/openWorld.ts";
 import { createFixedStepper } from "../src/game/fixedStep.ts";
 import { newGame, loadSave, persistSave, parseImportedSave } from "../src/game/state.ts";
 import { npcReply } from "../src/game/dialogAI.ts";
@@ -34,7 +34,7 @@ test("all six room orders preserve free actions and independent physical changes
     assert.equal(s.shelter.boundary, "conversation");
     assert.equal(s.notes.length, 0, "reflection remains optional");
     assert.equal(isOpenWorldState(s), true);
-    assert.equal(ROOMS.length, 3);
+    assert.deepEqual(ROOMS.map(room => room.id), ["bay", "harbor", "shelter", "current"]);
   }
 });
 
@@ -421,4 +421,41 @@ test("normal NPC dialogue recalls only witnessed harbor events across save/load 
 test("legacy harbor facts do not gain an invented event kind or place", () => {
   assert.match(knowledgeLine({ at: 60, source: "heard", fact: "Alte Aussage" }),
     /^Erinnert \(gehört, Weltzeit 0:01:00 h, Ort nicht überliefert\)/);
+});
+
+
+test("observation comparisons: selectable relation persists across reload and stays revisable", () => {
+  const s = createOpenWorld();
+  applyWorldAction(s, "bay", "cover");
+  const idA = addObservation(s, "bay", "erste Deutung", "");
+  stepOpenWorld(s, 30);
+  applyWorldAction(s, "bay", "cover"); // Bedingung ändern
+  const idB = addObservation(s, "bay", "zweite Deutung", "");
+  assert.match(compareObservations(s, idA, idB, "similar"), /festgehalten/);
+  assert.equal(s.comparisons?.length, 1);
+  assert.equal(s.comparisons![0].relation, "similar");
+  // Revidieren: frühere Beziehung bleibt erhalten, kein zweiter Eintrag.
+  assert.match(compareObservations(s, idB, idA, "contradicts"), /revidiert/);
+  assert.equal(s.comparisons?.length, 1);
+  assert.equal(s.comparisons![0].relation, "contradicts");
+  assert.deepEqual(s.comparisons![0].revisions.map((r) => r.previous), ["similar"]);
+  // Ungültige Paare werden abgelehnt, ohne Zustand zu ändern.
+  assert.match(compareObservations(s, idA, idA, "open"), /zwei verschiedene/);
+  assert.match(compareObservations(s, idA, "unbekannt", "open"), /vorhanden/);
+  assert.equal(s.comparisons?.length, 1);
+  // Persistenz: Neuladen/Export/Import-Runde bewahrt Vergleich samt Revision.
+  assert.equal(isOpenWorldState(s), true);
+  const restored = JSON.parse(JSON.stringify(s));
+  assert.equal(isOpenWorldState(restored), true);
+  assert.equal(restored.comparisons.length, 1);
+  assert.equal(restored.comparisons[0].relation, "contradicts");
+  assert.equal(restored.comparisons[0].revisions.length, 1);
+  // Alte Stände ohne Vergleichsliste bleiben gültig.
+  const legacy = JSON.parse(JSON.stringify(s));
+  delete legacy.comparisons;
+  assert.equal(isOpenWorldState(legacy), true);
+  // Malformed Vergleiche werden beim Import abgewiesen.
+  const malformed = JSON.parse(JSON.stringify(s));
+  malformed.comparisons = [{ id: "x", a: idA, b: idB, relation: "unmöglich", at: 1, revisions: [] }];
+  assert.equal(isOpenWorldState(malformed), false);
 });
