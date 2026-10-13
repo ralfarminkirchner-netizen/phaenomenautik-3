@@ -4,9 +4,9 @@ Stand: 13. Oktober 2026. Auftrag: [Issue #2](https://github.com/ralfarminkirchne
 
 ## Arbeitsstand und Bestandsschutz
 
-Fortsetzung im vorhandenen externen Worktree `/Volumes/ThunderBolt4_2TB/Development/Projects/phaenomenautik-3-mac-mini`, Branch `codex/world-continuation-mac-mini-20261013`. Remote: `https://github.com/ralfarminkirchner-netizen/phaenomenautik-3.git`. PR #8 und #9 sind mit erhaltener Historie lokal integriert, noch nicht auf diesem Branch gepusht. Kein Vollmerge des abweichenden `main`.
+Fortsetzung im vorhandenen externen Worktree `/Volumes/ThunderBolt4_2TB/Development/Projects/phaenomenautik-3-mac-mini`, Branch `codex/world-continuation-mac-mini-20261013`. Remote: `https://github.com/ralfarminkirchner-netizen/phaenomenautik-3.git`. PR #8 und #9 sind mit erhaltener Historie integriert und auf diesem Branch gepusht. Kein Vollmerge des abweichenden `main`. [PR #10](https://github.com/ralfarminkirchner-netizen/phaenomenautik-3/pull/10) führt die Fortsetzung auf den gemeinsamen Arbeitsbranch zurück; noch nicht zusammengeführt.
 
-**Zuletzt tatsächlich gepusht:** `8ae7a004dbf7267d970d16895e143e56dacb426b` auf `origin/codex/open-world-mac-mini-20261010`. Der heutige Ausbau zählt bis zum bestätigten Push nicht dazu; diese Angabe danach aktualisieren.
+**Zuletzt tatsächlich gepushter Spielcode:** `7450ad9bfce3eb7cf6f818ff72c643e51f296602` auf `origin/codex/world-continuation-mac-mini-20261013`, Push durch Remote-Abgleich bestätigt. Der unmittelbar folgende Dokumentationscommit ergänzt diesen Nachweis und den PR-Link. Der gemeinsame Arbeitsbranch bleibt unverändert bei `8ae7a004dbf7267d970d16895e143e56dacb426b`; seine Übernahme allein enthält den heutigen Ausbau noch nicht.
 
 Die ursprüngliche Arbeitskopie `/Volumes/ThunderBolt4_2TB/Development/Projects/phaenomenautik-3` bleibt mit 23 geänderten versionierten Dateien und neun unversionierten Gruppen erhalten. Alle 72 Quellhashes aus `LOCAL-BASELINE-2026-10-10.json` sind unverändert. Ungesyncte Arbeit auf dem iMac bleibt unbekannt und muss dort zuerst geprüft werden.
 
@@ -49,7 +49,7 @@ Der tatsächlich geprüfte Atlasvertrag betrifft nur Flimmerbucht: `http://127.0
 
 ## Nächste Schritte und Rechnerwechsel
 
-1. Geprüfte zusammengehörige Änderungen gezielt committen und pushen; bestätigten Remote-Stand oben ersetzen und PR auf den gemeinsamen Arbeitsbranch anlegen.
+1. PR #10 gegen den gemeinsamen Arbeitsbranch prüfen; auf dem anderen Mac zuerst dessen lokale Änderungen sichern und prüfen, dann den Fortsetzungsbranch gezielt übernehmen. Nicht ungeprüft auf `main` wechseln oder lokale iMac-Arbeit ersetzen.
 2. Längeres freies Segeln mit Wetterwechseln und Begegnungsfolgen prüfen; Leistung unter benannten, vergleichbaren Bedingungen weiter messen. Resonanzraum und freiwilligen Kompass im bestehenden System weiterentwickeln.
 3. Gestaltungsfreude, Sammeln und Segeln ohne Reflexionspflicht erhalten. Physisches Hören sowie menschliche Spiel-, Form- und Klangabnahme bleiben offen.
 
