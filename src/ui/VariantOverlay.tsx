@@ -3,7 +3,7 @@
 // sich überdenken lässt. Beim Begreifen fällt die Maske, dahinter steht der
 // Kern. Register-Eintrag, Zärtlichkeit. Es heißt begreifen, nie fangen.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { store } from "../game/store";
 import { getWorld } from "../game/runtime";
 import { loadSave } from "../game/state";
@@ -21,8 +21,10 @@ export function VariantOverlay() {
 function VariantInner({ variantId }: { variantId: string }) {
   const x = VARIANT_BY_ID.get(variantId);
   const [revealed, setRevealed] = useState(false);
-  if (!x) return null;
-  const node = NODE_BY_ID.get(x.nodeId);
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const actionRef = useRef<HTMLButtonElement>(null);
+  const node = x ? NODE_BY_ID.get(x.nodeId) : undefined;
   const cluster = node ? CLUSTER_BY_ID.get(node.cluster) : undefined;
   // Wiederbegegnung: eine schon begriffene Maske bleibt ansehbar; der Eintrag
   // im Register bleibt einmalig.
@@ -34,18 +36,13 @@ function VariantInner({ variantId }: { variantId: string }) {
     setRevealed(true);
   }, [revealed]);
 
-  // Tastatur: E / Enter / Leertaste enthüllen den Kern
   useEffect(() => {
-    const h = (ev: KeyboardEvent) => {
-      const k = ev.key.toLowerCase();
-      if (k === "e" || k === "enter" || k === " ") {
-        ev.preventDefault();
-        if (!revealed) reveal();
-      }
+    const previous = document.activeElement;
+    actionRef.current?.focus();
+    return () => {
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
     };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [revealed, reveal]);
+  }, []);
 
   const complete = () => {
     getWorld()?.completeVariantEncounter(variantId);
@@ -56,12 +53,40 @@ function VariantInner({ variantId }: { variantId: string }) {
     store.set({ variantId: null });
   };
 
+  if (!x) return null;
+
   return (
     <div className="absolute inset-x-0 bottom-0 z-30 pointer-events-auto flex justify-center px-4 pb-6">
-      <div className="w-full max-w-xl rounded-2xl border border-white/15 bg-[#0d1522]/92 backdrop-blur-md shadow-2xl overflow-hidden">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="w-full max-w-xl max-h-[calc(100dvh-3rem)] rounded-2xl border border-white/15 bg-[#0d1522]/92 backdrop-blur-md shadow-2xl overflow-y-auto"
+        onKeyDown={(event) => {
+          if (store.get().paused || store.get().protectionOpen) return;
+          if (event.key === "Tab") {
+            const buttons = dialogRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)");
+            const first = buttons?.[0], last = buttons?.[buttons.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last?.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first?.focus();
+            }
+          } else if (event.key.toLowerCase() === "e" && !event.repeat && !event.altKey && !event.ctrlKey && !event.metaKey) {
+            event.preventDefault();
+            reveal();
+            actionRef.current?.focus();
+          }
+          // Enter and Space retain native button activation; Escape belongs to protection.
+          if (event.key !== "Escape") event.stopPropagation();
+        }}
+      >
         <div className="flex items-center justify-between px-4 py-2.5 bg-black/40 border-b border-white/10">
           <div>
-            <span className="font-bold" style={{ color: `hsl(${x.hue}, 75%, 72%)` }}>
+            <span id={titleId} className="font-bold" style={{ color: `hsl(${x.hue}, 75%, 72%)` }}>
               {x.maskName}
             </span>
             <span className="ml-2 text-xs italic text-white/50">{x.epithet}</span>
@@ -70,7 +95,7 @@ function VariantInner({ variantId }: { variantId: string }) {
             <span className="text-[10px] uppercase tracking-wider text-white/40">
               Eine Maske{cluster ? ` · ${cluster.name}` : ""}
             </span>
-            <button className="text-white/50 hover:text-white text-lg px-2" onClick={close} title="Später weiter (Esc)">
+            <button className="text-white/50 hover:text-white text-lg px-2" onClick={close} title="Später weiter" aria-label="Später weiter">
               ✕
             </button>
           </div>
@@ -88,14 +113,14 @@ function VariantInner({ variantId }: { variantId: string }) {
             <div className="space-y-3">
               <p className="text-sm leading-relaxed text-emerald-100 whitespace-pre-wrap">{x.begreifen}</p>
               <p className="text-xs leading-relaxed text-white/60 border-l-2 border-amber-200/40 pl-3">
-                Mögliche Deutung: Hinter der Maske steht {node?.name ?? "ein noch unbenannter Kern"}. Wie jede
-                Lesart darfst du sie später im Journal überdenken — die Begegnung selbst wandert ins Atlas-Register.
+                Mögliche Deutung: Hinter der Maske steht {node?.name ?? "ein noch unbenannter Kern"}.
+                {" "}Diese Lesart bleibt ein Angebot. Die Begegnung kannst du ins Register aufnehmen.
               </p>
             </div>
           )}
         </div>
 
-        <div className="px-4 pb-3 flex items-center justify-between">
+        <div className="px-4 pb-3 flex flex-wrap items-center justify-between gap-3">
           <span className="text-[10px] text-white/35">
             {revealed
               ? "Die Maske fällt — der Kern bleibt"
@@ -103,6 +128,7 @@ function VariantInner({ variantId }: { variantId: string }) {
           </span>
           {revealed ? (
             <button
+              ref={actionRef}
               onClick={complete}
               className="rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-semibold px-4 py-1.5 text-sm transition"
             >
@@ -110,6 +136,7 @@ function VariantInner({ variantId }: { variantId: string }) {
             </button>
           ) : (
             <button
+              ref={actionRef}
               onClick={reveal}
               className="rounded-lg bg-white/[0.08] hover:bg-white/[0.15] border border-white/15 px-4 py-1.5 text-sm text-white/85 transition"
             >

@@ -1,12 +1,24 @@
 import { ensureNpcMemory } from "./npcMemory";
 
 // One persisted world clock. The rooms are places in that world, not chapters.
-export type RoomId = "bay" | "harbor" | "shelter";
+export type RoomId = "bay" | "harbor" | "shelter" | "current";
+export const CURRENT_ROOM = {
+  x: 2690, z: 3230, arrivalX: 2690, arrivalZ: 3320,
+  influenceRadius: 140, tetherRadius: 32,
+  anchorX: 2690, anchorZ: 3254, referenceX: 2678, referenceZ: 3254,
+} as const;
 export const ROOMS: { id: RoomId; name: string; x: number; z: number; arrivalX: number; arrivalZ: number; reason: string }[] = [
   { id: "bay", name: "Flimmerbucht", x: 2420, z: 3230, arrivalX: 2420, arrivalZ: 3320, reason: "Licht auf dem Wasser verfolgen" },
   { id: "harbor", name: "Werkhafen", x: 2270, z: 3300, arrivalX: 2360, arrivalZ: 3300, reason: "Etwas gestalten oder weitergeben" },
   { id: "shelter", name: "Stiller Strand", x: 1150, z: 3050, arrivalX: 1290, arrivalZ: 3050, reason: "Ruhe, Abstand oder ein Gespräch suchen" },
+  { id: "current", name: "Strömungsfeld", ...CURRENT_ROOM, reason: "Mit Strömung und einer treibenden Boje spielen" },
 ];
+const roomIds: RoomId[] = ROOMS.map(room => room.id);
+export interface CurrentRoomState {
+  gateAngle: 0 | 45 | 90;
+  marker: { x: number; z: number };
+  reference: boolean;
+}
 
 export interface KnowledgeEntry { at: number; room?: RoomId; kind?: "message" | "delivery" | "retraction" | "observation"; source: "seen" | "heard"; fact: string }
 export interface HarborDelivery {
@@ -59,6 +71,7 @@ export interface OpenWorldState {
     pierRepair?: { at: number; deliveryId: number; recipient: "Mara" | "Tove"; wood: number; rope: number } | null;
   };
   shelter: { seatAngle: number; path: "near" | "wide"; invitation: boolean; boundary: "quiet" | "conversation"; knowledge: KnowledgeEntry[] };
+  current?: CurrentRoomState;
   notes: ObservationNote[];
   /** Freiwillige Vergleiche zwischen zwei Beobachtungen — Beziehung bleibt revidierbar. */
   comparisons?: ObservationComparison[];
@@ -96,7 +109,12 @@ export function ensureOpenWorld(save: { openWorld?: OpenWorldState; timeOfDay?: 
   // Alte Stände ohne Vergleichsliste bleiben gültig.
   save.openWorld.comparisons ??= [];
   ensureHarborMaterials(save.openWorld);
+  ensureCurrentRoom(save.openWorld);
   return save.openWorld;
+}
+
+export function ensureCurrentRoom(s: OpenWorldState): CurrentRoomState {
+  return s.current ??= { gateAngle: 0, marker: { x: CURRENT_ROOM.anchorX, z: CURRENT_ROOM.anchorZ }, reference: false };
 }
 
 /** Old aggregates retain their stock; only the saved last parcel proves a purpose. */
@@ -133,6 +151,19 @@ export function stepOpenWorld(s: OpenWorldState, dt: number): void {
   s.windAngle = 0.4 + Math.sin(s.seconds / 260) * 0.5;
   const rain = worldStorm(s);
   s.weather = s.weatherOverride ?? (rain > 0.68 ? "rain" : rain > 0.18 ? "breeze" : "calm");
+  const current = ensureCurrentRoom(s);
+  if (dt > 0) {
+    const field = sampleFields(s, current.marker.x, current.marker.z);
+    current.marker.x += field.currentX * dt;
+    current.marker.z += field.currentZ * dt;
+    const dx = current.marker.x - CURRENT_ROOM.anchorX, dz = current.marker.z - CURRENT_ROOM.anchorZ;
+    const distance = Math.hypot(dx, dz);
+    if (distance > CURRENT_ROOM.tetherRadius) {
+      const scale = CURRENT_ROOM.tetherRadius / distance;
+      current.marker.x = CURRENT_ROOM.anchorX + dx * scale;
+      current.marker.z = CURRENT_ROOM.anchorZ + dz * scale;
+    }
+  }
   if (s.shelter.boundary === "conversation" && sampleFields(s, 1150, 3050).soundMask >= 0.45) s.shelter.boundary = "quiet";
 }
 function stormAt(seconds: number): number { return clamp((Math.sin(seconds / 140 - 1.5) + 1) / 2, 0, 1); }
@@ -159,10 +190,16 @@ export function sampleFields(s: OpenWorldState, x: number, z: number) {
   const windAngle = s.windAngle + Math.sin(x / 600 + z / 710) * 0.18;
   const tide = Math.sin(s.seconds * Math.PI * 2 / 240) * 0.42;
   const flow = 0.45 + storm * 0.75;
+  const currentX = Math.sin(z / 620 + s.seconds / 85) * flow;
+  const currentZ = Math.cos(x / 710 + s.seconds / 95) * flow;
+  // The gate deflects this same current for the boat and the tethered marker.
+  const influence = Math.max(0, 1 - Math.hypot(x - CURRENT_ROOM.x, z - CURRENT_ROOM.z) / CURRENT_ROOM.influenceRadius);
+  const deflection = (s.current?.gateAngle ?? 0) * Math.PI / 180 * influence * influence;
+  const cos = Math.cos(deflection), sin = Math.sin(deflection);
   return {
     windX: Math.cos(windAngle) * windSpeed, windZ: Math.sin(windAngle) * windSpeed, windSpeed,
-    currentX: Math.sin(z / 620 + s.seconds / 85) * flow,
-    currentZ: Math.cos(x / 710 + s.seconds / 95) * flow,
+    currentX: currentX * cos - currentZ * sin,
+    currentZ: currentX * sin + currentZ * cos,
     tide, storm, visibility: 1100 - storm * 680,
     soundMask: clamp(windSpeed / 23 + storm * 0.5 - shelter * 0.12, 0, 1),
     gust, // örtlicher Böenanteil (−0.75…+0.75) — treibt auch die Wellenhöhe
@@ -224,6 +261,13 @@ function bayFact(s: OpenWorldState, viewpoint: OpenWorldState["bay"]["viewpoint"
 export function describeRoom(s: OpenWorldState, room: RoomId): string[] {
   const place = roomById(room), fields = sampleFields(s, place.x, place.z);
   const environment = `${weatherName(s)}, Wind ${fields.windSpeed.toFixed(1)} m/s, Tide ${fields.tide >= 0 ? "+" : ""}${fields.tide.toFixed(2)} m. Sicht etwa ${Math.round(fields.visibility)} m.`;
+  if (room === "current") {
+    const c = ensureCurrentRoom(s), drift = sampleFields(s, c.marker.x, c.marker.z);
+    const distance = Math.hypot(c.marker.x - CURRENT_ROOM.anchorX, c.marker.z - CURRENT_ROOM.anchorZ);
+    return [environment, `Das Leittor steht bei ${c.gateAngle}°. An der Boje fließt das Wasser mit ${Math.hypot(drift.currentX, drift.currentZ).toFixed(2)} m/s.`,
+      `Die markierte Boje ist ${distance.toFixed(1)} m von ihrem Anker entfernt. Das Seil reicht ${CURRENT_ROOM.tetherRadius} m.`,
+      c.reference ? "Die feste Vergleichsmarke bleibt an ihrem Ort, während die Boje mit der Strömung zieht." : "Die Boje zieht mit der Strömung; eine feste Vergleichsmarke ist noch nicht gesetzt."];
+  }
   if (room === "bay") return [environment, bayFact(s), `Reflektoren ${Math.round(s.bay.reflectorAngle)}°, Blick ${s.bay.viewpoint === "shore" ? "vom Ufer" : "seitlich"}; Vergleichsmarke ${s.bay.reference ? "gesetzt" : "noch nicht gesetzt"}.`];
   if (room === "harbor") {
     const h = s.harbor;
@@ -238,6 +282,13 @@ export function describeRoom(s: OpenWorldState, room: RoomId): string[] {
 }
 
 export function availableActions(s: OpenWorldState, room: RoomId): { id: string; label: string }[] {
+  if (room === "current") return [
+    { id: "gate:0", label: "Leittor auf 0° stellen" },
+    { id: "gate:45", label: "Leittor auf 45° stellen" },
+    { id: "gate:90", label: "Leittor auf 90° stellen" },
+    { id: "reference", label: ensureCurrentRoom(s).reference ? "Vergleichsmarke entfernen" : "Feste Vergleichsmarke setzen" },
+    { id: "reset-marker", label: "Boje zum Anker zurückholen" },
+  ];
   if (room === "bay") return [
     { id: "rotate-left", label: "Reflektoren 15° zurückdrehen" }, { id: "rotate-right", label: "Reflektoren 15° weiterdrehen" },
     { id: "cover", label: s.bay.covered ? "Abdeckung abnehmen" : "Reflektoren abdecken" },
@@ -276,6 +327,22 @@ export function applyWorldAction(s: OpenWorldState, room: RoomId, action: string
     return "Du betrachtest die Welt bei anderem Sonnenstand. Beobachtungen behalten ihren Zeitpunkt; Licht und Reflexion ändern sich.";
   }
   s.activeRoom = room;
+  if (room === "current") {
+    const c = ensureCurrentRoom(s);
+    if (action === "gate:0" || action === "gate:45" || action === "gate:90") {
+      c.gateAngle = Number(action.slice(5)) as CurrentRoomState["gateAngle"];
+      return `Das Leittor steht bei ${c.gateAngle}°. Die örtliche Strömung ändert ihre Richtung; die Boje bleibt zunächst an ihrer bisherigen Position.`;
+    }
+    if (action === "reference") {
+      c.reference = !c.reference;
+      return c.reference ? "Die Vergleichsmarke steht fest. Die Boje und das Wasser bewegen sich weiter." : "Du hast die Vergleichsmarke entfernt. Die Strömung und die Boje laufen weiter.";
+    }
+    if (action === "reset-marker") {
+      c.marker.x = CURRENT_ROOM.anchorX;
+      c.marker.z = CURRENT_ROOM.anchorZ;
+      return "Du hast die Boje zum Anker zurückgeholt. Sie treibt von hier erneut mit der aktuellen Strömung; Tor und Vergleichsmarke bleiben unverändert.";
+    }
+  }
   if (room === "bay") {
     const b = s.bay;
     if (action === "rotate-left" || action === "rotate-right") { b.reflectorAngle = angle(b.reflectorAngle + (action === "rotate-left" ? -15 : 15)); return bayFact(s); }
@@ -390,11 +457,15 @@ export function recordRoomAction(s: OpenWorldState, room: RoomId, action: string
 export function addObservation(s: OpenWorldState, room: RoomId, interpretation = "", question = ""): string {
   const id = `observation-${s.notes.length + 1}-${Math.round(s.seconds * 1000)}`;
   const place = roomById(room), fields = sampleFields(s, place.x, place.z);
+  const current = room === "current" ? ensureCurrentRoom(s) : null;
+  const drift = current ? sampleFields(s, current.marker.x, current.marker.z) : null;
   const configuration: ObservationSnapshot["configuration"] = room === "bay"
     ? { reflectorAngle: s.bay.reflectorAngle, covered: s.bay.covered, reference: s.bay.reference, viewpoint: s.bay.viewpoint }
     : room === "harbor"
       ? { wood: s.harbor.inventory.wood, rope: s.harbor.inventory.rope, deliveredWood: s.harbor.delivered.wood, deliveredRope: s.harbor.delivered.rope, task: s.harbor.task, recipient: s.harbor.recipient }
-      : { seatAngle: s.shelter.seatAngle, path: s.shelter.path, invitation: s.shelter.invitation, boundary: s.shelter.boundary };
+      : current && drift
+        ? { gateAngle: current.gateAngle, markerX: current.marker.x, markerZ: current.marker.z, currentX: drift.currentX, currentZ: drift.currentZ, reference: current.reference, tetherRadius: CURRENT_ROOM.tetherRadius }
+        : { seatAngle: s.shelter.seatAngle, path: s.shelter.path, invitation: s.shelter.invitation, boundary: s.shelter.boundary };
   const snapshot: ObservationSnapshot = {
     timeOfDay: s.timeOfDay, weather: s.weather,
     wind: { x: fields.windX, z: fields.windZ, speed: fields.windSpeed },
@@ -440,12 +511,16 @@ export function isOpenWorldState(value: unknown): value is OpenWorldState {
   const member = (v: unknown, choices: unknown[]) => choices.includes(v);
   const inventory = (v: unknown) => object(v) && bounded(v.wood, 0, 10000) && Number.isInteger(v.wood) && bounded(v.rope, 0, 10000) && Number.isInteger(v.rope);
   const timestamp = (v: unknown) => bounded(v, 0, object(value) && finite(value.seconds) ? value.seconds : 0);
-  const knowledge = (v: unknown) => Array.isArray(v) && v.every((k) => object(k) && timestamp(k.at) && member(k.source, ["seen", "heard"]) && typeof k.fact === "string" && (k.room === undefined || member(k.room, ["bay", "harbor", "shelter"])) && (k.kind === undefined || member(k.kind, ["message", "delivery", "retraction", "observation"])));
-  const roomAction = (v: unknown): v is RoomActionRecord => object(v) && timestamp(v.at) && member(v.room, ["bay", "harbor", "shelter"]) && typeof v.action === "string" && typeof v.outcome === "string";
-  if (!object(value) || !bounded(value.seconds, 0, Number.MAX_SAFE_INTEGER) || !bounded(value.dayStart, 0, 24) || !bounded(value.timeOfDay, 0, 24) || !finite(value.windAngle) || !member(value.weather, ["calm", "breeze", "rain"]) || !member(value.activeRoom, [null, "bay", "harbor", "shelter"])) return false;
+  const knowledge = (v: unknown) => Array.isArray(v) && v.every((k) => object(k) && timestamp(k.at) && member(k.source, ["seen", "heard"]) && typeof k.fact === "string" && (k.room === undefined || member(k.room, roomIds)) && (k.kind === undefined || member(k.kind, ["message", "delivery", "retraction", "observation"])));
+  const roomAction = (v: unknown): v is RoomActionRecord => object(v) && timestamp(v.at) && member(v.room, roomIds) && typeof v.action === "string" && typeof v.outcome === "string";
+  if (!object(value) || !bounded(value.seconds, 0, Number.MAX_SAFE_INTEGER) || !bounded(value.dayStart, 0, 24) || !bounded(value.timeOfDay, 0, 24) || !finite(value.windAngle) || !member(value.weather, ["calm", "breeze", "rain"]) || !member(value.activeRoom, [null, ...roomIds])) return false;
   if (value.weatherOverride !== undefined && !member(value.weatherOverride, [null, "calm", "breeze", "rain"])) return false;
   if (value.lastRoomAction !== undefined && !roomAction(value.lastRoomAction)) return false;
-  if (value.camera !== undefined && (!object(value.camera) || !finite(value.camera.yaw) || !bounded(value.camera.pitch, -Math.PI, Math.PI) || !bounded(value.camera.distance, 1, 1000) || !member(value.camera.room, [null, "bay", "harbor", "shelter"]))) return false;
+  if (value.camera !== undefined && (!object(value.camera) || !finite(value.camera.yaw) || !bounded(value.camera.pitch, -Math.PI, Math.PI) || !bounded(value.camera.distance, 1, 1000) || !member(value.camera.room, [null, ...roomIds]))) return false;
+  if (value.current !== undefined) {
+    const c = value.current;
+    if (!object(c) || !member(c.gateAngle, [0, 45, 90]) || typeof c.reference !== "boolean" || !object(c.marker) || !finite(c.marker.x) || !finite(c.marker.z) || Math.hypot(c.marker.x - CURRENT_ROOM.anchorX, c.marker.z - CURRENT_ROOM.anchorZ) > CURRENT_ROOM.tetherRadius + 1e-8) return false;
+  }
   const b = value.bay, h = value.harbor, sh = value.shelter;
   if (!object(b) || !bounded(b.reflectorAngle, 0, 360) || typeof b.covered !== "boolean" || typeof b.reference !== "boolean" || !member(b.viewpoint, ["shore", "offset"]) || !knowledge(b.knowledge) || !knowledge(b.offsetKnowledge)) return false;
   if (!object(h) || !inventory(h.inventory) || !inventory(h.delivered) || !member(h.task, ["none", "repair", "supplies"]) || !member(h.recipient, [null, "Mara", "Tove"]) || !object(h.knowledge) || !knowledge(h.knowledge.Mara) || !knowledge(h.knowledge.Tove)) return false;
@@ -483,7 +558,7 @@ export function isOpenWorldState(value: unknown): value is OpenWorldState {
   if (!Array.isArray(value.notes)) return false;
   const ids = new Set<string>();
   return value.notes.every((n) => {
-    if (!object(n) || typeof n.id !== "string" || !n.id || ids.has(n.id) || !member(n.room, ["bay", "harbor", "shelter"]) || !timestamp(n.at) || !Array.isArray(n.facts) || !n.facts.every((f) => typeof f === "string") || typeof n.interpretation !== "string" || typeof n.question !== "string" || !Array.isArray(n.revisions)) return false;
+    if (!object(n) || typeof n.id !== "string" || !n.id || ids.has(n.id) || !member(n.room, roomIds) || !timestamp(n.at) || !Array.isArray(n.facts) || !n.facts.every((f) => typeof f === "string") || typeof n.interpretation !== "string" || typeof n.question !== "string" || !Array.isArray(n.revisions)) return false;
     ids.add(n.id);
     if (n.snapshot !== undefined) {
       const snap = n.snapshot;
@@ -495,23 +570,38 @@ export function isOpenWorldState(value: unknown): value is OpenWorldState {
       previousTime = Number(r.at);
       return true;
     });
-  }) && comparisonsValid(value.comparisons);
+  }) && comparisonsValid(value.comparisons, value.notes as unknown as ObservationNote[], Number(value.seconds));
 }
 
 /** Vergleiche sind optional (alte Stände haben keine); vorhandene müssen gültig sein. */
-function comparisonsValid(v: unknown): boolean {
+function comparisonsValid(v: unknown, notes: ObservationNote[], seconds: number): boolean {
   if (v === undefined) return true;
   if (!Array.isArray(v)) return false;
   const seen = new Set<string>();
+  const pairs = new Set<string>();
+  const observations = new Map(notes.map(note => [note.id, note]));
+  const relationValid = (relation: unknown) => typeof relation === "string" && ["similar", "different", "contradicts", "open"].includes(relation);
+  const timestampValid = (at: unknown): at is number => typeof at === "number" && Number.isFinite(at) && at >= 0 && at <= seconds;
   return v.every((c) => {
     if (!c || typeof c !== "object") return false;
     const o = c as Record<string, unknown>;
     if (typeof o.id !== "string" || !o.id || seen.has(o.id)) return false;
     seen.add(o.id);
     if (typeof o.a !== "string" || typeof o.b !== "string" || o.a === o.b) return false;
-    if (!["similar", "different", "contradicts", "open"].includes(o.relation as string)) return false;
-    if (typeof o.at !== "number" || !Number.isFinite(o.at) || o.at < 0) return false;
+    const a = observations.get(o.a), b = observations.get(o.b);
+    const pair = JSON.stringify([o.a, o.b].sort());
+    if (!a || !b || pairs.has(pair)) return false;
+    pairs.add(pair);
+    if (!relationValid(o.relation)) return false;
+    if (!timestampValid(o.at) || o.at < Math.max(a.at, b.at)) return false;
     if (!Array.isArray(o.revisions)) return false;
-    return o.revisions.every((r) => r && typeof r === "object" && typeof (r as Record<string, unknown>).at === "number" && ["similar", "different", "contradicts", "open"].includes((r as Record<string, unknown>).previous as string));
+    let previousTime = o.at;
+    return o.revisions.every((r) => {
+      if (!r || typeof r !== "object") return false;
+      const revision = r as Record<string, unknown>;
+      if (!timestampValid(revision.at) || revision.at < previousTime || !relationValid(revision.previous)) return false;
+      previousTime = revision.at;
+      return true;
+    });
   });
 }

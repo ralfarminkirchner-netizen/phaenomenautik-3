@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import { store } from "../game/store";
 import { getWorld } from "../game/runtime";
 import { DISCLAIMER } from "../game/data";
+import "./hud.css";
 
 function useHud() {
   return useSyncExternalStore(
@@ -135,13 +136,13 @@ export function HUD() {
       />
 
       {/* Kompass oben mittig */}
-      <div className="absolute top-20 left-1/2 -translate-x-1/2 flex flex-col items-center">
+      <div className="hud-navigation absolute top-20 left-1/2 -translate-x-1/2 flex flex-col items-center">
         <Compass yaw={h.compassYaw} bearing={h.targetBearing} targetName={h.targetName} targetDist={h.targetDist} />
         <WindVane yaw={h.compassYaw} windDeg={h.windDeg} windSpeed={h.windSpeed} gust={h.gust} />
       </div>
 
       {/* Uhrzeit & Wetter */}
-      <div className="absolute top-20 right-5 text-right text-white/80 text-xs drop-shadow">
+      <div className="hud-weather absolute top-20 right-5 text-right text-white/80 text-xs drop-shadow">
         <div className="text-base font-semibold tabular-nums">
           {String(hh).padStart(2, "0")}:{String(mm).padStart(2, "0")}
         </div>
@@ -149,8 +150,9 @@ export function HUD() {
         {h.showFps && <div className="mt-1 text-emerald-300">{h.fps} fps</div>}
       </div>
 
+      <div className="hud-footer">
       {/* Statusbalken unten links */}
-      <div className="absolute bottom-5 left-5 flex flex-col gap-2">
+      <div className="hud-vitals absolute bottom-5 left-5 flex flex-col gap-2">
         <Bar value={h.stability} max={h.maxStability} color="bg-gradient-to-r from-teal-400 to-emerald-400" label="Figur · Stabilität" />
         <Bar value={h.presence} max={h.maxPresence} color="bg-gradient-to-r from-sky-400 to-indigo-400" label="Figur · Präsenz" />
         <Bar value={h.stamina} max={h.maxStamina} color="bg-gradient-to-r from-amber-400 to-lime-400" label="Ausdauer" />
@@ -161,7 +163,7 @@ export function HUD() {
             {h.meals.map((m, i) => (
               <div
                 key={i}
-                className={`flex items-center gap-1.5 text-[10px] rounded-full px-2 py-0.5 border w-fit ${
+                className={`hud-meal flex items-center gap-1.5 text-[10px] rounded-full px-2 py-0.5 border w-fit ${
                   m.crash ? "bg-rose-900/60 border-rose-400/40 text-rose-200" : "bg-black/40 border-white/15 text-white/75"
                 }`}
                 title={m.name}
@@ -179,7 +181,7 @@ export function HUD() {
       </div>
 
       {/* Ressourcen unten rechts */}
-      <div className="absolute bottom-5 right-5 text-right text-white/90 text-sm drop-shadow space-y-1">
+      <div className="hud-resources absolute bottom-5 right-5 text-right text-white/90 text-sm drop-shadow space-y-1">
         <div>🪵 Holzstücke: <span className="font-semibold">{h.wood}</span></div>
         <div className="text-xs text-white/70">Für Feuer und Axtausbau</div>
         <div>💎 Kristalle: <span className="font-semibold">{h.crystals}</span></div>
@@ -210,7 +212,7 @@ export function HUD() {
 
       {/* Interaktions-Prompt */}
       {h.prompt && !overlayOpen && (
-        <div className="absolute bottom-24 left-1/2 -translate-x-1/2">
+        <div className="hud-prompt absolute bottom-24 left-1/2 -translate-x-1/2">
           <div className="flex items-center gap-2.5 rounded-xl bg-black/55 backdrop-blur px-4 py-2.5 border border-white/15 shadow-lg">
             <span className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-amber-400 text-black font-bold text-sm shadow">
               {h.promptKey}
@@ -222,13 +224,14 @@ export function HUD() {
 
       {/* Steuerungshilfe */}
       {!overlayOpen && (
-      <div className="absolute bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-white/40 text-center">
+      <div className="hud-help absolute bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-white/40 text-center">
         {h.mode === "sailing"
           ? "W/S Segel · A/D Ruder · Shift Turbo · Maus Umschauen · E Anlegen"
           : "WASD Laufen · Shift Sprint · 2× Leertaste Doppelsprung · 1/2/3 Werkzeug · Klick benutzen · Q Ausweichen · E Interaktion · J Journal · T Bauen · Mooswände klettern"}
       </div>
       )}
 
+      </div>
       {/* Toasts */}
       <div className="absolute top-24 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
         {h.toasts.map((t) => (

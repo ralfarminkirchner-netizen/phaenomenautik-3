@@ -1710,7 +1710,7 @@ export class GameWorld {
     const localPosition = this.save.mode === "sailing" ? this.ship : this.player.pos;
     const field = sampleFields(state, localPosition.x, localPosition.z);
     this.storm = field.storm;
-    this.water.setEnvironment(this.storm, field.tide, field.windSpeed, state.seconds);
+    this.water.setEnvironment(this.storm, field.tide, state.seconds);
     audio.setStormIntensity(this.storm, field.windSpeed, field.soundMask);
 
     // Fokus & Modi
@@ -2131,14 +2131,15 @@ export class GameWorld {
       const y = Math.max(2, terrainHeight(room.x, room.z) + 2);
       const viewpoint = room.id === "bay" ? (this.getOpenWorldState().bay.viewpoint === "offset" ? 40 : 0) : 30;
       const yaw = this.sailYaw + viewpoint * Math.PI / 180;
-      const radius = this.sailDist * 3.2;
+      const focusZ = room.z + (room.id === "current" ? 12 : 0);
+      const radius = this.sailDist * (room.id === "current" ? 4.8 / Math.min(1, this.camera.aspect) : 3.2);
       const want = new THREE.Vector3(
         room.x + Math.sin(yaw) * Math.cos(this.sailPitch) * radius,
         y + Math.sin(this.sailPitch) * radius,
-        room.z + Math.cos(yaw) * Math.cos(this.sailPitch) * radius,
+        focusZ + Math.cos(yaw) * Math.cos(this.sailPitch) * radius,
       );
       this.camera.position.lerp(want, 1 - Math.pow(0.001, dt));
-      this.camera.lookAt(room.x, y, room.z);
+      this.camera.lookAt(room.x, y, focusZ);
       return;
     }
     const cp = Math.cos(this.sailPitch);
@@ -2226,7 +2227,7 @@ export class GameWorld {
 
   /** Zwei Beobachtungen freiwillig vergleichen; die Beziehung wird gespeichert. */
   compareObservations(aId: string, bId: string, relation: ComparisonRelation): string {
-    if (this.uiLock) return "Die Welt ist gerade angehalten.";
+    if (this.disposed || this.presentation !== null || store.get().dead) return "Die Welt ist gerade angehalten.";
     const result = compareObservations(this.getOpenWorldState(), aId, bId, relation);
     this.persist();
     store.set({ openWorldRevision: store.get().openWorldRevision + 1 });
@@ -2362,6 +2363,7 @@ export class GameWorld {
         }
       });
     }
+    this.rooms.dispose();
     this.renderer.dispose();
     if (this.renderer.domElement.parentNode === this.container) this.container.removeChild(this.renderer.domElement);
   }

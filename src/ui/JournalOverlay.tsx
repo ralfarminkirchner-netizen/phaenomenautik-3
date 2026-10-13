@@ -66,7 +66,7 @@ export function JournalOverlay() {
       <div role="dialog" aria-label="Journal" className={`w-full ${tab === "beobachtungen" ? "max-w-4xl" : "max-w-2xl"} max-h-[86vh] flex flex-col rounded-2xl border border-amber-200/20 bg-[#101a2a] shadow-2xl overflow-hidden`}>
         <div className="flex items-center justify-between px-5 py-3 border-b border-white/10 bg-black/30">
           <h2 className="text-lg font-bold text-amber-100 tracking-wide">📖 Journal</h2>
-          <button className="text-white/50 hover:text-white text-lg px-2" onClick={() => store.set({ journalOpen: false })} title="Schließen (J/Esc)">
+          <button className="text-white/50 hover:text-white text-lg px-2" onClick={() => store.set({ journalOpen: false })} title="Schließen (Esc)">
             ✕
           </button>
         </div>
@@ -85,7 +85,7 @@ export function JournalOverlay() {
           ))}
         </div>
         <div className="overflow-y-auto px-5 py-4 space-y-6 text-sm bg-[#16233a]">
-          {tab === "beobachtungen" && <ObservationJournal notes={world.getOpenWorldState().notes} onRevise={(id, text) => world.reviseObservation(id, text)} />}
+          {tab === "beobachtungen" && <ObservationJournal notes={world.getOpenWorldState().notes} comparisons={world.getOpenWorldState().comparisons ?? []} onRevise={(id, text) => world.reviseObservation(id, text)} onCompare={(a, b, relation) => world.compareObservations(a, b, relation)} />}
           {tab === "register" && (
             <section>
               <h3 className="text-xs uppercase tracking-widest text-sky-300/70 mb-2">

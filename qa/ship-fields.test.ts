@@ -136,12 +136,40 @@ test("gust coupling: CPU hull sampling and the emitted shader share the same loc
   const water = new Water(new THREE.Scene());
   const material = water.mesh.material as THREE.ShaderMaterial;
   // Starkwind erzeugt höhere Böenverstärkung, Flaute nur eine leise Ortsvariation.
-  water.setEnvironment(0.8, 0.1, 14, 49);
-  close(material.uniforms.uGustGain.value, Math.min(Math.max((14 / 7 - 0.55) * 0.5, 0.06), 0.85), 1e-9, "gain");
+  water.setEnvironment(0.8, 0.1, 49);
+  const regionalWindSpeed = 5 + 0.8 * 8;
+  close(material.uniforms.uGustGain.value, Math.min(Math.max((regionalWindSpeed / 7 - 0.55) * 0.5, 0.06), 0.85), 1e-9, "gain");
+  close(material.uniforms.uGustPhase.value, 49 / 7, 1e-9, "world clock");
   for (const [x, z, t] of [[2420, 3230, 32], [0, 0, 0], [1150, 3050, 7.5]]) {
     const gust = shaderGust(x, z, material.uniforms.uGustGain.value, material.uniforms.uGustPhase.value);
     close(water.heightAt(x, z, t) - 0.1, shaderHeight(material.vertexShader, x, z, t, material.uniforms.uStormAmp.value, gust), 0.0002, `gust ${x},${z} t=${t}`);
   }
+});
+
+test("visiting a wind shelter cannot change distant waves at the same world time", () => {
+  const water = new Water(new THREE.Scene());
+  const material = water.mesh.material as THREE.ShaderMaterial;
+  const state = createOpenWorld();
+  state.seconds = 49;
+  state.weatherOverride = "rain";
+  const bay = ROOMS.find(room => room.id === "bay")!;
+  const shelter = ROOMS.find(room => room.id === "shelter")!;
+  const exposed = sampleFields(state, bay.x, bay.z);
+  const sheltered = sampleFields(state, shelter.x, shelter.z);
+  assert.ok(sheltered.windSpeed < exposed.windSpeed * 0.5, "the local wind really differs");
+
+  const snapshot = (field: ReturnType<typeof sampleFields>) => {
+    water.setEnvironment(field.storm, field.tide, state.seconds);
+    return {
+      heights: ROOMS.map(room => water.heightAt(room.x, room.z, state.seconds)),
+      storm: material.uniforms.uStormAmp.value,
+      tide: material.uniforms.uTide.value,
+      gain: material.uniforms.uGustGain.value,
+      phase: material.uniforms.uGustPhase.value,
+    };
+  };
+  assert.deepEqual(snapshot(sheltered), snapshot(exposed));
+  close(material.uniforms.uGustPhase.value, state.seconds / 7);
 });
 
 test("a sailing hull responds to wind direction and strength", () => {

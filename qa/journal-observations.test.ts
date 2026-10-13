@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ROOMS, addObservation, createOpenWorld, ensureOpenWorld, isOpenWorldState, recordRoomAction, reviseObservation, sampleFields, setWorldTime, setWorldWeather, stepOpenWorld } from "../src/game/openWorld.ts";
+import { ROOMS, addObservation, compareObservations, createOpenWorld, ensureOpenWorld, isOpenWorldState, recordRoomAction, reviseObservation, sampleFields, setWorldTime, setWorldWeather, stepOpenWorld, type OpenWorldState } from "../src/game/openWorld.ts";
 import { loadSave, newGame, parseImportedSave, persistSave } from "../src/game/state.ts";
+import { handleProtectionKeyDown } from "../src/game/pause.ts";
+import { initialHud, store } from "../src/game/store.ts";
 
 const data = new Map<string, string>();
 Object.defineProperty(globalThis, "localStorage", { value: {
@@ -77,4 +79,121 @@ test("import rejects malformed snapshots and actions that postdate or belong to 
   addObservation(world, "harbor");
   assert.equal(world.notes[1].snapshot?.action, null, "a different room's action cannot be attributed to this observation");
   assert.equal(isOpenWorldState(world), true);
+});
+
+test("comparison revisions survive reload and explicit import without rewriting observations", () => {
+  data.clear(); loadSave();
+  const save = newGame(), world = ensureOpenWorld(save);
+  const a = addObservation(world, "bay", "Das Licht wirkt nah.");
+  stepOpenWorld(world, 15);
+  const b = addObservation(world, "harbor", "Der Blickort wirkt mit.");
+  const observations = structuredClone(world.notes);
+  compareObservations(world, a, b, "similar");
+  const firstComparison = structuredClone(world.comparisons);
+  compareObservations(world, b, a, "similar");
+  assert.deepEqual(world.comparisons, firstComparison, "repeating a relationship in reversed order is a no-op");
+  stepOpenWorld(world, 10);
+  compareObservations(world, b, a, "contradicts");
+  stepOpenWorld(world, 8);
+  compareObservations(world, a, b, "open");
+  assert.equal(world.comparisons?.length, 1);
+  assert.deepEqual(world.comparisons?.[0].revisions, [{ at: 25, previous: "similar" }, { at: 33, previous: "contradicts" }]);
+  assert.equal(world.comparisons?.[0].relation, "open");
+  assert.deepEqual(world.notes, observations);
+  assert.equal(persistSave(save), true);
+  const restored = loadSave();
+  assert.deepEqual(restored?.openWorld?.comparisons, world.comparisons);
+  const previousStorage = data.get("phaenomenautik3-save-v1");
+  const imported = parseImportedSave(JSON.stringify(save));
+  assert.deepEqual(imported.openWorld?.comparisons, world.comparisons);
+  assert.deepEqual(imported.openWorld?.notes, observations);
+  assert.equal(data.get("phaenomenautik3-save-v1"), previousStorage);
+  assert.equal(persistSave(imported), true);
+  assert.deepEqual(loadSave()?.openWorld?.comparisons, world.comparisons);
+});
+
+test("old saves without comparisons import with an empty list and unchanged observations", () => {
+  data.clear(); loadSave();
+  const save = newGame(), world = ensureOpenWorld(save);
+  addObservation(world, "shelter", "Ruhe ist gerade genug.");
+  delete world.comparisons;
+  const observations = structuredClone(world.notes);
+  const imported = parseImportedSave(JSON.stringify(save));
+  assert.deepEqual(imported.openWorld?.comparisons, []);
+  assert.deepEqual(imported.openWorld?.notes, observations);
+});
+
+test("invalid comparison imports cannot replace the existing save", () => {
+  data.clear(); loadSave();
+  const save = newGame(), world = ensureOpenWorld(save);
+  stepOpenWorld(world, 10);
+  const a = addObservation(world, "bay");
+  stepOpenWorld(world, 10);
+  const b = addObservation(world, "harbor");
+  stepOpenWorld(world, 10);
+  compareObservations(world, a, b, "similar");
+  stepOpenWorld(world, 20);
+  assert.equal(persistSave(save), true);
+  const previousStorage = data.get("phaenomenautik3-save-v1");
+  const corruptions: [string, (state: OpenWorldState) => void][] = [
+    ["missing note reference", (state) => { state.comparisons![0].a = "absent"; }],
+    ["empty note reference", (state) => { state.comparisons![0].a = ""; }],
+    ["future comparison", (state) => { state.comparisons![0].at = state.seconds + 1; }],
+    ["negative revision", (state) => { state.comparisons![0].revisions = [{ at: -1, previous: "open" }]; }],
+    ["reversed revision times", (state) => { state.comparisons![0].revisions = [{ at: 40, previous: "open" }, { at: 35, previous: "different" }]; }],
+    ["duplicate unordered pair", (state) => { state.comparisons!.push({ ...state.comparisons![0], id: "second", a: b, b: a }); }],
+    ["comparison before its notes", (state) => { state.comparisons![0].at = 15; }],
+  ];
+  for (const [name, corrupt] of corruptions) {
+    const invalid = structuredClone(save);
+    corrupt(invalid.openWorld!);
+    assert.equal(isOpenWorldState(invalid.openWorld), false, name);
+    assert.throws(() => parseImportedSave(JSON.stringify(invalid)), name);
+    assert.equal(data.get("phaenomenautik3-save-v1"), previousStorage, name);
+  }
+});
+
+function keyboardEvent(key = "Escape", repeat = false) {
+  const calls = { prevented: false, stopped: false };
+  const event = {
+    key, repeat,
+    preventDefault() { calls.prevented = true; },
+    stopImmediatePropagation() { calls.stopped = true; },
+  } as KeyboardEvent;
+  return { event, calls };
+}
+
+test("Escape closes the journal before opening pause, including held-key repeats", () => {
+  store.set({ ...initialHud, journalOpen: true });
+  const { event, calls } = keyboardEvent();
+  handleProtectionKeyDown(event);
+  assert.equal(store.get().journalOpen, false);
+  assert.equal(store.get().paused, false);
+  assert.equal(store.get().protectionOpen, null);
+  assert.deepEqual(calls, { prevented: true, stopped: true });
+  handleProtectionKeyDown(keyboardEvent("Escape", true).event);
+  assert.equal(store.get().protectionOpen, null, "holding Escape does not open a second panel");
+  handleProtectionKeyDown(keyboardEvent().event);
+  assert.equal(store.get().paused, true);
+  assert.equal(store.get().protectionOpen, "pause", "a new Escape press still opens protection");
+});
+
+test("Escape in protection does not close an underlying journal or resume the world", () => {
+  store.set({ ...initialHud, journalOpen: true, paused: true, protectionOpen: "help" });
+  handleProtectionKeyDown(keyboardEvent().event);
+  assert.equal(store.get().journalOpen, true);
+  assert.equal(store.get().paused, true);
+  assert.equal(store.get().protectionOpen, "pause");
+});
+
+test("journal Escape does not clear an independent pause, other keys remain untouched", () => {
+  store.set({ ...initialHud, journalOpen: true, paused: true });
+  const { event, calls } = keyboardEvent("j");
+  handleProtectionKeyDown(event);
+  assert.equal(store.get().journalOpen, true);
+  assert.deepEqual(calls, { prevented: false, stopped: false });
+  handleProtectionKeyDown(keyboardEvent().event);
+  assert.equal(store.get().journalOpen, false);
+  assert.equal(store.get().paused, true);
+  assert.equal(store.get().protectionOpen, null);
 });

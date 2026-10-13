@@ -451,12 +451,12 @@ export class Water {
   private gustPhase = 0;
 
   /** Vor Rumpf-/Bojenabtastung und Rendern denselben Zustand setzen. */
-  setEnvironment(storm: number, tide = 0, windSpeed = 6, worldSeconds = 0) {
+  setEnvironment(storm: number, tide = 0, worldSeconds = 0) {
     this.tide = tide;
     this.stormAmp = 0.75 + storm * 1.5;
-    // Böen-Amplifikation: bei Starkwind deutlich höhere, örtlich wandernde
-    // Wellenberge; in Ruhe nur eine leise Ortsvariation.
-    this.gustGain = clamp((windSpeed / 7 - 0.55) * 0.5, 0.06, 0.85);
+    // Global wave energy uses regional wind, never the observer's local shelter.
+    const regionalWindSpeed = 5 + storm * 8;
+    this.gustGain = clamp((regionalWindSpeed / 7 - 0.55) * 0.5, 0.06, 0.85);
     this.gustPhase = worldSeconds / 7;
     this.mat.uniforms.uStormAmp.value = this.stormAmp;
     this.mat.uniforms.uGustGain.value = this.gustGain;

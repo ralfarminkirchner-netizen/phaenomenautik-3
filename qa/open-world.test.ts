@@ -34,7 +34,7 @@ test("all six room orders preserve free actions and independent physical changes
     assert.equal(s.shelter.boundary, "conversation");
     assert.equal(s.notes.length, 0, "reflection remains optional");
     assert.equal(isOpenWorldState(s), true);
-    assert.equal(ROOMS.length, 3);
+    assert.deepEqual(ROOMS.map(room => room.id), ["bay", "harbor", "shelter", "current"]);
   }
 });
 
