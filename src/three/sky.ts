@@ -1,5 +1,7 @@
-// PHÄNOMENAUTIK 3 — Himmel: Tag/Nacht-Kuppel (Gradient, Sonne, Wolken, Sterne)
-// + Licht-Rigg (Sonne/Mond, Hemisphäre) und Nebel-Synchronisation.
+// PHÄNOMENAUTIK — Himmel v2 (M5 Grafiksprung): atmosphärischer Gradient mit
+// Höhendunst, breiter Mie-Dämmerung, Mondscheibe mit Halo, zweischichtige
+// Wolken (Cumulus mit Silberkante + hohe Cirrus-Streifen), dichtere Sterne.
+// Licht-Rigg (Sonne/Mond, Hemisphäre) und Nebel-Synchronisation unverändert.
 
 import * as THREE from "three";
 import { clamp, lerp, smoothstep } from "../game/noise";
@@ -45,45 +47,68 @@ float fbm(vec2 p) {
 void main() {
   vec3 dir = normalize(vDir);
   float up = clamp(dir.y, -0.12, 1.0);
+  float sunAmount = max(dot(dir, uSunDir), 0.0);
 
-  // Basis-Gradient
+  // Basis-Gradient + Höhendunst-Band über dem Horizont
   float g = pow(clamp(up * 1.6 + 0.08, 0.0, 1.0), 0.62);
   vec3 col = mix(uHorizon, uZenith, g);
+  col += uHorizon * 0.18 * exp(-max(up, 0.0) * 9.0) * (1.0 - uNight * 0.8);
 
-  // Warme Dämmerungsband um die Sonne (wenn sie tief steht)
-  float sunAmount = max(dot(dir, uSunDir), 0.0);
-  float duskBand = pow(sunAmount, 3.0) * (1.0 - abs(uSunDir.y) * 3.0);
-  if (duskBand > 0.0) col += vec3(1.0, 0.42, 0.18) * clamp(duskBand, 0.0, 1.0) * 0.55 * (1.0 - uNight * 0.85);
+  // Breiter warmer Mie-Schein, wenn die Sonne tief steht
+  float duskiness = clamp(1.0 - abs(uSunDir.y) * 2.2, 0.0, 1.0);
+  float mie = pow(sunAmount, 6.0) * 0.35 + pow(sunAmount, 2.0) * 0.12;
+  col += vec3(1.0, 0.55, 0.28) * mie * duskiness * (1.0 - uNight * 0.9) * 0.8;
 
   // Sonne: Kern + Halo
   float disc = smoothstep(0.9993, 0.99965, sunAmount);
   float halo = pow(sunAmount, 350.0) * 0.45 + pow(sunAmount, 24.0) * 0.10;
   col += uSunColor * (disc * 1.7 + halo);
 
-  // Sterne (nur Nachts, über dem Horizont)
+  // Mond: Gegenrichtung zur Sonne, silbrige Scheibe mit weichem Halo
+  vec3 moonDir = normalize(vec3(uSunDir.x, -uSunDir.y, uSunDir.z));
+  float moonUp = smoothstep(0.0, 0.25, moonDir.y);
+  float mAmount = max(dot(dir, moonDir), 0.0);
+  float mDisc = smoothstep(0.99955, 0.99985, mAmount);
+  float mHalo = pow(mAmount, 220.0) * 0.35 + pow(mAmount, 16.0) * 0.05;
+  col += vec3(0.82, 0.88, 1.0) * (mDisc * 1.35 + mHalo) * uNight * moonUp;
+
+  // Sterne (nur Nachts, über dem Horizont) — dichter, mit Größenabstufung
   if (uNight > 0.15 && dir.y > 0.02) {
     vec2 sp = dir.xz / (dir.y + 0.35) * 130.0;
     vec2 cell = floor(sp);
-    float star = step(0.9955, hash(cell));
+    float h1 = hash(cell);
+    float star = step(0.9945, h1);
     float tw = 0.55 + 0.45 * sin(uTime * 2.2 + hash(cell + 7.0) * 40.0);
     vec2 c = fract(sp) - 0.5;
-    float dotStar = smoothstep(0.24, 0.02, length(c));
-    col += vec3(0.9, 0.93, 1.0) * star * dotStar * tw * uNight * smoothstep(0.02, 0.2, dir.y);
+    float dotStar = smoothstep(0.26, 0.02, length(c));
+    float mag = 0.45 + 0.55 * step(0.9982, h1); // wenige helle, viele kleine
+    col += vec3(0.9, 0.93, 1.0) * star * dotStar * tw * mag * uNight * smoothstep(0.02, 0.2, dir.y);
   }
 
-  // Wolken: auf eine Ebene projiziert, treiben mit der Zeit
+  // Wolken, zwei Schichten — auf eine Ebene projiziert, treiben mit der Zeit
   if (dir.y > 0.015) {
     vec2 cp = dir.xz / (dir.y + 0.22);
-    cp = cp * 1.7 + vec2(uTime * 0.006, uTime * 0.0023);
-    float cl = fbm(cp);
+    float fade = smoothstep(0.015, 0.14, dir.y);
+
+    // Schicht A: Cumulus — Schattenkörper mit Silberkante Richtung Sonne
+    vec2 cpA = cp * 1.7 + vec2(uTime * 0.006, uTime * 0.0023);
+    float cl = fbm(cpA);
     float cov = smoothstep(0.62 - uCloudCover * 0.34, 0.94 - uCloudCover * 0.28, cl);
-    float shade = fbm(cp * 2.7 + 3.1);
+    float shade = fbm(cpA * 2.7 + 3.1);
+    float litSide = fbm(cpA - uSunDir.xz * 0.35);
+    float rim = clamp((litSide - shade) * 2.2, 0.0, 1.0);
     vec3 cloudLight = mix(uHorizon * 1.06 + uSunColor * 0.10, vec3(0.32, 0.35, 0.42), uCloudCover * 0.75);
     vec3 cloudDark = mix(cloudLight * 0.78, vec3(0.16, 0.18, 0.24), uCloudCover * 0.8);
-    vec3 ccol = mix(cloudLight, cloudDark, shade * 0.8);
+    vec3 ccol = mix(cloudDark, cloudLight, rim * 0.65 + 0.2);
     ccol = mix(ccol, vec3(0.03, 0.04, 0.09), uNight * 0.9);
-    float fade = smoothstep(0.015, 0.14, dir.y);
     col = mix(col, ccol, cov * fade * 0.9);
+
+    // Schicht B: Cirrus — hohe, windgescherte Streifen, fein und hell
+    vec2 cpB = cp * 0.55 + vec2(uTime * 0.0035, -uTime * 0.0012);
+    float ci = fbm(vec2(cpB.x * 0.5, cpB.y * 3.2));
+    float cir = smoothstep(0.58, 0.92, ci) * 0.35 * (1.0 - uCloudCover * 0.5);
+    vec3 ciCol = mix(vec3(0.95, 0.9, 0.86), uSunColor, 0.25) * (1.0 - uNight * 0.85);
+    col = mix(col, ciCol, cir * fade * smoothstep(0.06, 0.35, dir.y));
   }
 
   gl_FragColor = vec4(col, 1.0);
@@ -98,6 +123,8 @@ export interface SkyPalette {
   sunIntensity: number;
   hemiIntensity: number;
   night: number;
+  /** Dämmerungs-Stärke 0..1 — treibt das warme Grading in der Post-Pipeline. */
+  dusk: number;
 }
 
 /** Tageszeit (0–24) → Farbpalette & Sonnenrichtung */
@@ -134,6 +161,7 @@ export function paletteFor(timeOfDay: number, storm: number): SkyPalette {
     sunIntensity: lerp(0.02, 2.6, day) * (1 - storm * 0.55),
     hemiIntensity: lerp(0.15, 0.78, day) * (1 - storm * 0.4),
     night: 1 - day,
+    dusk: duskC,
   };
 }
 

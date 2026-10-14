@@ -1,9 +1,11 @@
 // PHÄNOMENAUTIK 3 — Wasser: Gerstner-Wellen + Detail-Normalen + Tiefenfarbe
 // + Küstenbrandung + Kammschaum + planare Echtzeit-Reflexion (Qualität „Hoch",
 // Messlatte: traumaatlas-3-Ozean) + Nebel-Anbindung (kein Horizont-Pop im Sturm).
-// Behebt gezielt die V2/V3-Mängel: große lesbare Wellen, Noise-Normalmaps gegen
-// „flach", Schaum gegen „klinisch", Glitzer mit Rauschmaske + Distanz gegen
-// Funkelflimmern, Nebel gegen sichtbare Ebenen-Kante.
+// M5: Wolkenschatten wandern mit der Himmels-Drift über die See, der Kamm-Schaum
+// zieht windgescheuerte Gischtbahnen. Behebt gezielt die V2/V3-Mängel: große
+// lesbare Wellen, Noise-Normalmaps gegen „flach", Schaum gegen „klinisch",
+// Glitzer mit Rauschmaske + Distanz gegen Funkelflimmern, Nebel gegen sichtbare
+// Ebenen-Kante.
 
 import * as THREE from "three";
 import { WAVES_GLSL, waveHeight } from "./waves";
@@ -57,6 +59,25 @@ float decodeHeight(vec2 worldXZ) {
   vec2 uv = worldXZ / uWorldSize;
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return -22.0;
   return texture2D(uTerrain, uv).r * 90.0 - 30.0;
+}
+
+// leichtes kachelndes Value-Noise für die Wolkenschatten (gleiche Drift wie der Himmel)
+float whash(vec2 p) {
+  p = fract(p * vec2(234.34, 435.345));
+  p += dot(p, p + 34.23);
+  return fract(p.x * p.y);
+}
+float wnoise(vec2 p) {
+  vec2 i = floor(p); vec2 f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  float a = whash(i); float b = whash(i + vec2(1.0, 0.0));
+  float c = whash(i + vec2(0.0, 1.0)); float d = whash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+float wfbm(vec2 p) {
+  float s = 0.0; float a = 0.5;
+  for (int i = 0; i < 3; i++) { s += wnoise(p) * a; p = p * 2.13 + 17.3; a *= 0.5; }
+  return s;
 }
 
 vec3 skyColor(vec3 dir) {
@@ -137,12 +158,20 @@ void main() {
   float shore = 1.0 - smoothstep(0.0, 1.7, depth);
   float bands = sin(depth * 4.2 - uTime * 1.9 + foamNoise * 4.0) * 0.5 + 0.5;
   float surf = shore * smoothstep(0.58, 0.95, bands + foamNoise * 0.3);
-  // Kamm-Schaum auf Wellenspitzen (stärker bei Sturm)
-  float crestF = smoothstep(0.38 - uStorm * 0.14, 0.85, vCrest + foamNoise * 0.2 - 0.08);
+  // Kamm-Schaum auf Wellenspitzen (stärker bei Sturm) — zusätzlich gestreckte
+  // „Streifen" entlang der Hauptwindrichtung: Gischtbahnen statt Punktschaum
+  vec2 streakUV = vec2(vWorld.x * 0.045 + vWorld.z * 0.009, vWorld.z * 0.011 - vWorld.x * 0.002);
+  float streak = texture2D(uNormals, streakUV + vec2(uTime * 0.02, -uTime * 0.008)).w;
+  float crestF = smoothstep(0.38 - uStorm * 0.14, 0.85, vCrest + foamNoise * 0.2 + streak * 0.22 - 0.08);
   float foam = clamp(surf + crestF * (0.3 + uStorm * 0.6), 0.0, 1.0);
   foam *= mix(0.22, 1.0, detailFade); // ferne Kämme nicht mehr als weiße Flächen
   vec3 foamCol = vec3(0.92, 0.96, 0.98) * (1.0 - uNight * 0.75);
   col = mix(col, foamCol, foam * 0.68);
+
+  // Wolkenschatten: dunkle Flecken wandern mit der Himmels-Drift über die See
+  float csh = wfbm(vWorld.xz * 0.0056 + vec2(uTime * 0.006, uTime * 0.0023));
+  float cloudShad = smoothstep(0.52, 0.86, csh) * clamp(0.25 + uStorm * 0.75, 0.0, 1.0);
+  col *= 1.0 - cloudShad * 0.3 * (1.0 - uNight * 0.65);
 
   // Transparenz: Ufer lässt den Sand durchscheinen, Tiefe wird undurchsichtig
   float alpha = mix(0.94, 0.45, shallowMix);

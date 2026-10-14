@@ -63,6 +63,10 @@ export class Props {
 
   private variantMeshes = new Map<string, THREE.InstancedMesh>();
   private treeCount = 0;
+  // M5: Wind-Sway — geteilte Uniformen, in update() getrieben
+  private windT = { value: 0 };
+  private windAmp = { value: 0.07 };
+  private windInjected = new Set<THREE.Material>();
   workbench = { x: 0, y: 0, z: 0 };
   dock = { x: 0, z: 0, len: 26, width: 4.2, y: 1.5, dirX: 0, dirZ: 1 };
 
@@ -77,6 +81,45 @@ export class Props {
     this.placeHarborDecor();
   }
 
+  /** Vertex-Shader-Injektion: Bäume/Palmen wiegen sich im Wind. Phasenverschoben
+   *  pro Instanz (aus der Instanz-Matrix), stärker oben, Böen überlagern. */
+  private injectWind(mat: THREE.Material | THREE.Material[], height: number) {
+    const list = Array.isArray(mat) ? mat : [mat];
+    for (const m of list) {
+      if (this.windInjected.has(m)) continue;
+      this.windInjected.add(m);
+      const sm = m as THREE.MeshStandardMaterial;
+      const windT = this.windT;
+      const windAmp = this.windAmp;
+      sm.onBeforeCompile = (shader) => {
+        shader.uniforms.uWindT = windT;
+        shader.uniforms.uWindAmp = windAmp;
+        shader.vertexShader = shader.vertexShader
+          .replace(
+            "#include <common>",
+            "#include <common>\nuniform float uWindT;\nuniform float uWindAmp;",
+          )
+          .replace(
+            "#include <begin_vertex>",
+            /* glsl */ `#include <begin_vertex>
+            {
+              float hgt = clamp(position.y / ${height.toFixed(2)}, 0.0, 1.0);
+              float ph = 0.0;
+              #ifdef USE_INSTANCING
+                ph = instanceMatrix[3][0] * 0.37 + instanceMatrix[3][2] * 0.29;
+              #endif
+              float sw = sin(uWindT * 1.35 + ph) + sin(uWindT * 2.31 + ph * 1.7) * 0.5;
+              float gust = 0.6 + 0.4 * sin(uWindT * 0.23 + ph * 0.5);
+              float sway = sw * uWindAmp * gust * hgt * hgt;
+              transformed.x += sway;
+              transformed.z += cos(uWindT * 1.13 + ph) * uWindAmp * 0.6 * gust * hgt * hgt;
+            }`,
+          );
+      };
+      sm.needsUpdate = true;
+    }
+  }
+
   private makeInstancedVariant(key: ModelKey, capacity: number, targetH: number): THREE.InstancedMesh {
     const { geometry, materials } = extractMerged(key);
     // normieren: Modellhöhe → targetH
@@ -87,6 +130,7 @@ export class Props {
     geometry.translate(0, -bb.min.y, 0);
     geometry.scale(s, s, s);
     const mat = materials.length === 1 ? materials[0] : materials;
+    this.injectWind(mat, targetH);
     const mesh = new THREE.InstancedMesh(geometry, mat, capacity);
     mesh.castShadow = true;
     mesh.receiveShadow = false;
@@ -457,7 +501,11 @@ export class Props {
     return h;
   }
 
-  update(t: number, dt: number, now: number, particles: ParticleSystem, waveY: (x: number, z: number) => number, camPos: THREE.Vector3) {
+  update(t: number, dt: number, now: number, particles: ParticleSystem, waveY: (x: number, z: number) => number, camPos: THREE.Vector3, storm = 0) {
+    // M5: Wind wiegt die Vegetation — Böen skalieren mit dem Sturm
+    this.windT.value = t;
+    this.windAmp.value = 0.07 + storm * 0.22;
+
     let dirty = false;
     for (const rec of this.trees) {
       if (rec.state === "falling") {

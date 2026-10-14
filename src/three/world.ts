@@ -32,10 +32,7 @@ import { autoUnderstoodByNode, todaysVariants, VARIANT_BY_ID } from "../game/var
 import { audio } from "../game/audio";
 import { store } from "../game/store";
 import { preloadAll, extractMerged, getModel, setShadows } from "./assets";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { PostFX } from "./postfx";
 
 const DAY_LENGTH_S = 1080; // 18 Minuten = 1 Spieltag
 
@@ -83,8 +80,7 @@ export class GameWorld {
   // Kampf
   private attackCooldown = 0;
   private fireBuffUntil = 0;
-  private composer!: EffectComposer;
-  private bloom!: UnrealBloomPass;
+  private postfx!: PostFX;
   private clouds: { mesh: THREE.Mesh; speed: number }[] = [];
   private npcs!: Npcs;
   private loreStones!: LoreStones;
@@ -145,16 +141,8 @@ export class GameWorld {
 
     this.camera = new THREE.PerspectiveCamera(62, container.clientWidth / container.clientHeight, 0.3, 5200);
 
-    this.composer = new EffectComposer(this.renderer);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(
-      new THREE.Vector2(container.clientWidth, container.clientHeight),
-      0.38, // Stärke
-      0.5, // Radius
-      0.85, // Schwelle — nur Sonne, Feuer, Glitzer, Emissives
-    );
-    this.composer.addPass(this.bloom);
-    this.composer.addPass(new OutputPass());
+    // M5 Grafiksprung: Post-Pipeline NG (GTAO + Bloom + Grade + Output)
+    this.postfx = new PostFX(this.renderer, this.scene, this.camera, container.clientWidth, container.clientHeight);
 
     this.sky = new Sky(this.scene);
     this.water = new Water(this.scene);
@@ -379,7 +367,7 @@ export class GameWorld {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(w, h);
-    this.composer?.setSize(w, h);
+    this.postfx?.setSize(w, h);
     this.water?.setReflSize(w, h, this.renderer.getPixelRatio());
   };
 
@@ -1573,7 +1561,7 @@ export class GameWorld {
       pal.night,
       this.scene.fog as THREE.Fog,
     );
-    this.props.update(t, dt, this.elapsed, this.particles, (x, z) => this.water.heightAt(x, z, t), this.camera.position);
+    this.props.update(t, dt, this.elapsed, this.particles, (x, z) => this.water.heightAt(x, z, t), this.camera.position, this.storm);
     this.particles.update(dt);
 
     // Phänomen-Wächter
@@ -1688,13 +1676,14 @@ export class GameWorld {
     }
 
     this.updateClouds(dt, focus);
-    this.bloom.enabled = this.qualityLevel < 3;
+    // Stimmungs-Grading der Post-Pipeline aus Tageszeit/Wetter (M5)
+    this.postfx.update(t, { night: pal.night, dusk: pal.dusk, storm: this.storm });
     // Planare Wasser-Reflexion, gestaffelt: Stufe 0/1 = jedes 2. Frame (30 Hz),
     // Stufe 2 = jedes 4. Frame (15 Hz), Stufe 3 = aus (analytischer Himmel bleibt)
     const reflEvery = this.qualityLevel < 2 ? 2 : this.qualityLevel === 2 ? 4 : 0;
     if (reflEvery > 0 && this.reflFrame++ % reflEvery === 0)
       this.water.renderReflection(this.renderer, this.scene, this.camera);
-    this.composer.render();
+    this.postfx.render(dt);
   };
 
   private createClouds() {
@@ -1732,6 +1721,7 @@ export class GameWorld {
   private applyQuality() {
     // M4.1-Lektion: Schatten NIE ganz aus (ohne sie „schwebt“ alles) —
     // stattdessen die Schatten-Map verkleinern; Reflexion gestaffelt ausdünnen.
+    this.postfx.setQuality(this.qualityLevel);
     const sunShadow = this.sky.sun.shadow;
     const setShadowRes = (px: number) => {
       if (sunShadow.mapSize.x !== px) {
@@ -1742,28 +1732,28 @@ export class GameWorld {
     };
     switch (this.qualityLevel) {
       case 0:
-        this.composer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
+        this.postfx.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
         this.water.setHighQuality(true);
         this.water.setReflection(true);
         setShadowRes(2048);
         this.renderer.shadowMap.enabled = true;
         break;
       case 1:
-        this.composer.setPixelRatio(1.25);
+        this.postfx.setPixelRatio(1.25);
         this.water.setHighQuality(true);
         this.water.setReflection(true);
         setShadowRes(1536);
         this.renderer.shadowMap.enabled = true;
         break;
       case 2:
-        this.composer.setPixelRatio(1);
+        this.postfx.setPixelRatio(1);
         this.water.setHighQuality(false);
         this.water.setReflection(true); // selten aktualisiert (Loop: jedes 4. Frame)
         setShadowRes(1024);
         this.renderer.shadowMap.enabled = true;
         break;
       case 3:
-        this.composer.setPixelRatio(0.85);
+        this.postfx.setPixelRatio(0.85);
         this.water.setHighQuality(false);
         this.water.setReflection(false);
         setShadowRes(512); // Schatten bleiben — klein, aber da
