@@ -53,8 +53,8 @@ const GradeShader = {
       vec2 d = uv - 0.5;
       float r2 = dot(d, d);
 
-      // chromatische Aberration: nur am Bildrand, dezent
-      float ab = uAberration * r2 * r2;
+      // chromatische Aberration: nur am Bildrand, dezent (max ~0,15 % Versatz)
+      float ab = uAberration * r2 * r2 * 0.006;
       vec3 col;
       col.r = texture2D(tDiffuse, uv + d * ab).r;
       col.g = texture2D(tDiffuse, uv).g;
@@ -141,18 +141,18 @@ export class PostFX {
   update(t: number, mood: GradeMood) {
     const u = this.grade.uniforms;
     u.uTime.value = t;
-    u.uSaturation.value = clamp(1.05 - mood.night * 0.14 - mood.storm * 0.06, 0.85, 1.08);
+    u.uSaturation.value = clamp(1.08 - mood.night * 0.16 - mood.storm * 0.07, 0.85, 1.1);
     const tint = u.uTint.value as THREE.Color;
     tint.setRGB(1, 1, 1);
-    // Dämmerung: warmes Gold leicht anheben
-    tint.r = lerp(tint.r, 1.05, mood.dusk);
-    tint.g = lerp(tint.g, 0.99, mood.dusk);
-    tint.b = lerp(tint.b, 0.93, mood.dusk);
-    // Nacht: kühles Blau
-    tint.r = lerp(tint.r, 0.94, mood.night * 0.8);
-    tint.g = lerp(tint.g, 0.97, mood.night * 0.8);
-    tint.b = lerp(tint.b, 1.06, mood.night * 0.8);
-    u.uVignette.value = 0.3 + mood.dusk * 0.1 + mood.night * 0.08;
+    // Dämmerung: warmes Gold sichtbar anheben
+    tint.r = lerp(tint.r, 1.09, mood.dusk);
+    tint.g = lerp(tint.g, 1.0, mood.dusk);
+    tint.b = lerp(tint.b, 0.9, mood.dusk);
+    // Nacht: kühles Mondblau
+    tint.r = lerp(tint.r, 0.92, mood.night * 0.85);
+    tint.g = lerp(tint.g, 0.97, mood.night * 0.85);
+    tint.b = lerp(tint.b, 1.09, mood.night * 0.85);
+    u.uVignette.value = 0.32 + mood.dusk * 0.12 + mood.night * 0.1;
     u.uGrain.value = 0.026;
     u.uAberration.value = 0.5;
   }
